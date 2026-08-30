@@ -1,12 +1,7 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useLang } from "@/i18n/LanguageContext";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { site } from "@/lib/site";
-
-const SKILLS = ["TypeScript", "React", "Bun", "Node.js", "Python", "SQL", "Git", "Docker"];
-const INTERESTS = ["阅读", "写作", "开源", "烹饪", "旅行", "摄影"];
 
 export function About() {
   const { lang, t } = useLang();
@@ -25,38 +20,6 @@ export function About() {
         <br />
         {t.about.intro2}
       </p>
-
-      <Separator className="my-8" />
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{t.about.skillsTitle}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-1.5">
-            {SKILLS.map((skill) => (
-              <Badge key={skill} variant="secondary">
-                {skill}
-              </Badge>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle className="text-base">{t.about.interestsTitle}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-1.5">
-            {INTERESTS.map((item) => (
-              <Badge key={item} variant="outline">
-                {item}
-              </Badge>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
 
       <Separator className="my-8" />
 

@@ -47,7 +47,6 @@ export function Footer() {
             <span>
               © {year} {site.name} · {t.footer.rights}
             </span>
-            <span>{t.footer.builtWith}</span>
           </div>
         </div>
       </div>

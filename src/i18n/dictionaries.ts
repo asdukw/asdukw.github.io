@@ -27,7 +27,6 @@ export interface Dict {
     backToCategory: string;
   };
   footer: {
-    builtWith: string;
     rights: string;
   };
   theme: {
@@ -40,8 +39,6 @@ export interface Dict {
     introTitle: string;
     intro1: string;
     intro2: string;
-    skillsTitle: string;
-    interestsTitle: string;
     contactTitle: string;
   };
 }
@@ -81,7 +78,6 @@ export const zh: Dict = {
     backToCategory: "返回列表",
   },
   footer: {
-    builtWith: "用 Bun + React 手工搭建",
     rights: "保留所有权利。",
   },
   theme: {
@@ -94,8 +90,6 @@ export const zh: Dict = {
     introTitle: "关于我",
     intro1: "你好，我是 asdukw，一名软件工程师。",
     intro2: "白天写代码，晚上写文字。这里记录我的技术与生活。",
-    skillsTitle: "技能栈",
-    interestsTitle: "兴趣方向",
     contactTitle: "联系方式",
   },
 };
@@ -135,7 +129,6 @@ export const en: Dict = {
     backToCategory: "Back to list",
   },
   footer: {
-    builtWith: "Hand-built with Bun + React",
     rights: "All rights reserved.",
   },
   theme: {
@@ -148,8 +141,6 @@ export const en: Dict = {
     introTitle: "About me",
     intro1: "Hi, I'm asdukw, a software engineer.",
     intro2: "I write code by day and words by night. This site holds my notes on tech and life.",
-    skillsTitle: "Skills",
-    interestsTitle: "Interests",
     contactTitle: "Contact",
   },
 };
