@@ -41,7 +41,14 @@ No test runner, linter, or formatter is configured.
 - Server routes are defined inline in `src/index.ts` — no separate router file
 - Env vars prefixed `BUN_PUBLIC_` are exposed to client via `--env` flag
 - HMR uses `import.meta.hot.data` pattern in `frontend.tsx`
+- **Two lockfiles:** `bun.lock` is authoritative; `package-lock.json` is stale (missing deps, not updated) — ignore it
+- **Two `index.html` files:** root `index.html` is a stale placeholder; the real app shell is `src/index.html`
 - npm/bun 安装遇到网络问题时，使用代理端口 7897：
   ```powershell
   $env:HTTP_PROXY='http://127.0.0.1:7897'; $env:HTTPS_PROXY='http://127.0.0.1:7897'; npm install ...
   ```
+
+## CI/CD
+
+- GitHub Actions deploys `dist/` to GitHub Pages on push to `master` (`deploy.yml`)
+- CI uses `oven-sh/setup-bun@v2`, runs `bun install` then `bun run build`
