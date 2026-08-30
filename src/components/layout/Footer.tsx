@@ -28,8 +28,9 @@ export function Footer() {
             </a>
             <a
               href={`mailto:${site.mail}`}
-              className="text-muted-foreground transition-colors hover:text-foreground"
+              className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               aria-label="Email"
+              title={site.mail}
             >
               <Mail className="h-4 w-4" />
             </a>
