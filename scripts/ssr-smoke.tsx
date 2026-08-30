@@ -5,6 +5,7 @@ import {
   Route,
   RouterProvider,
 } from "react-router";
+import { ThemeProvider } from "@/lib/ThemeContext";
 import { LanguageProvider } from "@/i18n/LanguageContext";
 import { Layout } from "@/components/layout/Layout";
 import { Home } from "@/pages/Home";
@@ -38,9 +39,11 @@ function routesFor(paths: string[]) {
       { initialEntries: [path] },
     );
     const html = renderToString(
-      <LanguageProvider>
-        <RouterProvider router={router} />
-      </LanguageProvider>,
+      <ThemeProvider>
+        <LanguageProvider>
+          <RouterProvider router={router} />
+        </LanguageProvider>
+      </ThemeProvider>,
     );
     console.log(`${path}  →  ${html.length} chars`);
   }

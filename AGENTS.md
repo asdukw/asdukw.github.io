@@ -41,7 +41,9 @@ No test runner, linter, or formatter is configured. `bun x tsc --noEmit` 可做�
 
 - Tailwind CSS v4，`src/index.css` 是唯一源文件（含 `@theme inline` 与暗色模式变量）
 - 构建时用 `@tailwindcss/cli` 编译为 `src/styles.css` 供 App 引用（受 `bun build` 自身不支持 `@theme` 限制）
-- 主题变量采用 shadcn v4 变量间接模式（`:root` 基变量 + `@theme inline` 映射），支持 `prefers-color-scheme` 暗色
+- 主题变量采用 shadcn v4 变量间接模式（`:root` 基变量 + `@theme inline` 映射）
+- 暗色模式由 `.dark` class 控制（`src/lib/ThemeContext.tsx` + `@custom-variant dark`），默认跟随系统（`prefers-color-scheme`），可手动切浅/深色并持久化到 `localStorage["site.theme"]`（light/dark/system）
+- `src/index.html` 内有内联脚本，首屏前根据存储/系统偏好设置 `.dark` class，避免闪白
 
 ## Gotchas
 

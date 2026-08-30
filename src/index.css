@@ -1,6 +1,9 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
+  color-scheme: light;
   --background: hsl(0 0% 100%);
   --foreground: hsl(0 0% 3.9%);
   --card: hsl(0 0% 100%);
@@ -48,28 +51,27 @@
   --radius-xl: 0.75rem;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: hsl(0 0% 3.9%);
-    --foreground: hsl(0 0% 98%);
-    --card: hsl(0 0% 3.9%);
-    --card-foreground: hsl(0 0% 98%);
-    --popover: hsl(0 0% 3.9%);
-    --popover-foreground: hsl(0 0% 98%);
-    --primary: hsl(0 0% 98%);
-    --primary-foreground: hsl(0 0% 9%);
-    --secondary: hsl(0 0% 14.9%);
-    --secondary-foreground: hsl(0 0% 98%);
-    --muted: hsl(0 0% 14.9%);
-    --muted-foreground: hsl(0 0% 63.9%);
-    --accent: hsl(0 0% 14.9%);
-    --accent-foreground: hsl(0 0% 98%);
-    --destructive: hsl(0 62.8% 30.6%);
-    --destructive-foreground: hsl(0 0% 98%);
-    --border: hsl(0 0% 14.9%);
-    --input: hsl(0 0% 14.9%);
-    --ring: hsl(0 0% 83.1%);
-  }
+.dark {
+  color-scheme: dark;
+  --background: hsl(0 0% 3.9%);
+  --foreground: hsl(0 0% 98%);
+  --card: hsl(0 0% 3.9%);
+  --card-foreground: hsl(0 0% 98%);
+  --popover: hsl(0 0% 3.9%);
+  --popover-foreground: hsl(0 0% 98%);
+  --primary: hsl(0 0% 98%);
+  --primary-foreground: hsl(0 0% 9%);
+  --secondary: hsl(0 0% 14.9%);
+  --secondary-foreground: hsl(0 0% 98%);
+  --muted: hsl(0 0% 14.9%);
+  --muted-foreground: hsl(0 0% 63.9%);
+  --accent: hsl(0 0% 14.9%);
+  --accent-foreground: hsl(0 0% 98%);
+  --destructive: hsl(0 62.8% 30.6%);
+  --destructive-foreground: hsl(0 0% 98%);
+  --border: hsl(0 0% 14.9%);
+  --input: hsl(0 0% 14.9%);
+  --ring: hsl(0 0% 83.1%);
 }
 
 body {
@@ -311,36 +313,34 @@ body {
   font-weight: 600;
 }
 
-@media (prefers-color-scheme: dark) {
-  .prose-article .hljs-keyword,
-  .prose-article .hljs-selector-tag,
-  .prose-article .hljs-literal,
-  .prose-article .hljs-doctag,
-  .prose-article .hljs-title,
-  .prose-article .hljs-title.function_,
-  .prose-article .hljs-section,
-  .prose-article .hljs-meta {
+.dark .prose-article .hljs-keyword,
+  .dark .prose-article .hljs-selector-tag,
+  .dark .prose-article .hljs-literal,
+  .dark .prose-article .hljs-doctag,
+  .dark .prose-article .hljs-title,
+  .dark .prose-article .hljs-title.function_,
+  .dark .prose-article .hljs-section,
+  .dark .prose-article .hljs-meta {
     color: #f97583;
   }
 
-  .prose-article .hljs-string,
-  .prose-article .hljs-regexp,
-  .prose-article .hljs-addition {
+  .dark .prose-article .hljs-string,
+  .dark .prose-article .hljs-regexp,
+  .dark .prose-article .hljs-addition {
     color: #9ecbff;
   }
 
-  .prose-article .hljs-title.class_,
-  .prose-article .hljs-type,
-  .prose-article .hljs-built_in,
-  .prose-article .hljs-number,
-  .prose-article .hljs-symbol,
-  .prose-article .hljs-attr,
-  .prose-article .hljs-attribute,
-  .prose-article .hljs-variable,
-  .prose-article .hljs-template-variable,
-  .prose-article .hljs-params,
-  .prose-article .hljs-selector-id,
-  .prose-article .hljs-selector-class {
+  .dark .prose-article .hljs-title.class_,
+  .dark .prose-article .hljs-type,
+  .dark .prose-article .hljs-built_in,
+  .dark .prose-article .hljs-number,
+  .dark .prose-article .hljs-symbol,
+  .dark .prose-article .hljs-attr,
+  .dark .prose-article .hljs-attribute,
+  .dark .prose-article .hljs-variable,
+  .dark .prose-article .hljs-template-variable,
+  .dark .prose-article .hljs-params,
+  .dark .prose-article .hljs-selector-id,
+  .dark .prose-article .hljs-selector-class {
     color: #79b8ff;
   }
-}

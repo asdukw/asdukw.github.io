@@ -30,6 +30,12 @@ export interface Dict {
     builtWith: string;
     rights: string;
   };
+  theme: {
+    light: string;
+    dark: string;
+    system: string;
+    switch: string;
+  };
   about: {
     introTitle: string;
     intro1: string;
@@ -78,6 +84,12 @@ export const zh: Dict = {
     builtWith: "用 Bun + React 手工搭建",
     rights: "保留所有权利。",
   },
+  theme: {
+    light: "浅色",
+    dark: "深色",
+    system: "跟随系统",
+    switch: "切换主题",
+  },
   about: {
     introTitle: "关于我",
     intro1: "你好，我是 asdukw，一名软件工程师。",
@@ -125,6 +137,12 @@ export const en: Dict = {
   footer: {
     builtWith: "Hand-built with Bun + React",
     rights: "All rights reserved.",
+  },
+  theme: {
+    light: "Light",
+    dark: "Dark",
+    system: "System",
+    switch: "Toggle theme",
   },
   about: {
     introTitle: "About me",
