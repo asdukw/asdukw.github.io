@@ -1,4 +1,3 @@
-import { Link } from "react-router";
 import { Mail } from "lucide-react";
 import { GithubIcon } from "@/components/icons/GithubIcon";
 import { useLang } from "@/i18n/LanguageContext";
@@ -15,13 +14,6 @@ export function Footer() {
           <div>
             <div className="text-sm font-semibold">{site.name}</div>
             <div className="mt-1 text-sm text-muted-foreground">{site.tagline[lang]}</div>
-          </div>
-
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <Link to="/blog" className="hover:text-foreground">{t.nav.blog}</Link>
-            <Link to="/tech" className="hover:text-foreground">{t.nav.tech}</Link>
-            <Link to="/projects" className="hover:text-foreground">{t.nav.projects}</Link>
-            <Link to="/about" className="hover:text-foreground">{t.nav.about}</Link>
           </div>
 
           <div className="flex items-center gap-4">
