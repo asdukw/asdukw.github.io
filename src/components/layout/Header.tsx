@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router";
 import { Languages, Menu } from "lucide-react";
-import { AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useLang } from "@/i18n/LanguageContext";
@@ -37,7 +36,7 @@ export function Header() {
           className="flex items-center gap-2 text-base font-semibold tracking-tight"
         >
           <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-md bg-primary text-primary-foreground text-xs font-bold">
-            <AvatarImage src={avatarUrl} alt={site.name} />
+            <img src={avatarUrl} alt={site.name} className="h-full w-full object-cover" />
           </span>
           <span className="hidden sm:inline">{site.name}</span>
         </Link>
