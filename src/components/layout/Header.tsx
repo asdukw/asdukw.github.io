@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router";
 import { Languages, Menu } from "lucide-react";
+import { AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useLang } from "@/i18n/LanguageContext";
 import { site } from "@/lib/site";
 import { ThemeSwitcher } from "./ThemeSwitcher";
+import avatarUrl from "@/assets/avatar.jpg";
 
 const NAV = [
   { to: "/", key: "home", end: true },
@@ -34,8 +36,8 @@ export function Header() {
           to="/"
           className="flex items-center gap-2 text-base font-semibold tracking-tight"
         >
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground text-xs font-bold">
-            {site.name.slice(0, 1).toUpperCase()}
+          <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-md bg-primary text-primary-foreground text-xs font-bold">
+            <AvatarImage src={avatarUrl} alt={site.name} />
           </span>
           <span className="hidden sm:inline">{site.name}</span>
         </Link>
