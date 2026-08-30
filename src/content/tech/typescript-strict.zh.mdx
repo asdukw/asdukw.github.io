@@ -1,0 +1,31 @@
+---
+title: "TypeScript 严格模式下的日常修行"
+date: "2026-06-12"
+tags: ["TypeScript", "工程化"]
+excerpt: "在 noUncheckedIndexedAccess 与 strict 打开的日子里，写代码的姿势会不一样。"
+---
+
+## strict 是一个起点
+
+`strict: true` 打开后，`null` 和 `undefined` 不再被悄悄放过。
+一开始会觉得烦，久了你会感谢它——它把你的错误从凌晨三点的线上，提前到了敲下回车的那一瞬间。
+
+## noUncheckedIndexedAccess 教会我的事
+
+数组下标不再是安全的：
+
+```ts
+const arr = ["a", "b", "c"];
+const item: string | undefined = arr[1]; // 类型变成了 string | undefined
+```
+
+这逼着你在取值前想清楚越界的可能，往往顺手就加上了一行防御。
+
+## `unknown` 比 `any` 好，`never` 比想象中重要
+
+- `any` 是掩耳盗铃，`unknown` 是诚实的边界。
+- `never` 让你能写出穷尽(exhaustive)的类型分支，编译器帮你盯着未来的改动。
+
+## 结语
+
+严格模式不是束缚，而是把「纪律」外化成「工具」。剩下的，交给肌肉记忆。

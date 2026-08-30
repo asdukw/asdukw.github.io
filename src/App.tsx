@@ -1,23 +1,35 @@
-import { APITester } from "./APITester";
-import "./index.css";
-
-import logo from "./logo.svg";
-import reactLogo from "./react.svg";
+import { HashRouter, Route, Routes } from "react-router";
+import "./styles.css";
+import { LanguageProvider } from "@/i18n/LanguageContext";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { Layout } from "@/components/layout/Layout";
+import { Home } from "@/pages/Home";
+import { PostListPage } from "@/pages/PostListPage";
+import { PostDetailPage } from "@/pages/PostDetailPage";
+import { Projects } from "@/pages/Projects";
+import { About } from "@/pages/About";
+import { NotFound } from "@/pages/NotFound";
 
 export function App() {
   return (
-    <div className="app">
-      <div className="logo-container">
-        <img src={logo} alt="Bun Logo" className="logo bun-logo" />
-        <img src={reactLogo} alt="React Logo" className="logo react-logo" />
-      </div>
-
-      <h1>Bun + React</h1>
-      <p>
-        Edit <code>src/App.tsx</code> and save to test HMR
-      </p>
-      <APITester />
-    </div>
+    <LanguageProvider>
+      <TooltipProvider>
+        <HashRouter>
+          <Routes>
+            <Route element={<Layout />}>
+              <Route index element={<Home />} />
+              <Route path="blog" element={<PostListPage category="blog" />} />
+              <Route path="blog/:slug" element={<PostDetailPage category="blog" />} />
+              <Route path="tech" element={<PostListPage category="tech" />} />
+              <Route path="tech/:slug" element={<PostDetailPage category="tech" />} />
+              <Route path="projects" element={<Projects />} />
+              <Route path="about" element={<About />} />
+              <Route path="*" element={<NotFound />} />
+            </Route>
+          </Routes>
+        </HashRouter>
+      </TooltipProvider>
+    </LanguageProvider>
   );
 }
 

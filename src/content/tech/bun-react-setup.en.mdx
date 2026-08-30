@@ -1,0 +1,50 @@
+---
+title: "Building this site with Bun + React"
+date: "2026-08-28"
+tags: ["Bun", "React", "Tailwind"]
+excerpt: "How I built this site with Bun, React 19, and shadcn/ui, including the MDX content pipeline."
+---
+
+## Why This Stack
+
+The bar for choosing tools is simple: **the least moving parts, the fastest feedback**.
+
+- **Bun** acts as both runtime and bundler; one command to run, zero config.
+- **React 19 + shadcn/ui** keeps me from writing buttons and cards from scratch.
+- **Tailwind CSS v4** defines the theme with CSS variables; dark mode is almost free.
+
+## The Content Pipeline
+
+The site is fully static (deployed to GitHub Pages), and every post is an **MDX file**:
+
+```
+src/content/<category>/<slug>.<lang>.mdx
+```
+
+The build script `scripts/build-content.ts` processes each post:
+
+1. Parse frontmatter with `gray-matter` (title, date, tags, excerpt).
+2. Compile Markdown + JSX to React elements with `@mdx-js/mdx`'s `evaluateSync`.
+3. Render to a static HTML string with `react-dom/server`'s `renderToStaticMarkup`.
+4. Generate anchor ids with `rehype-slug` and collect headings into a TOC.
+5. Apply syntax highlighting with `rehype-highlight`.
+6. Write everything into `src/generated/content.ts` for the frontend to import.
+
+## Syntax Highlighting
+
+```ts
+function computeReadingTime(text: string): number {
+  const words = text.replace(/\s+/g, " ").trim().split(" ").length;
+  return Math.max(1, Math.round(words / 200));
+}
+```
+
+## Gotchas Hit Along the Way
+
+- `@types/gray-matter` does not exist on npm; gray-matter ships its own types.
+- Running the shadcn CLI via `npx` crashes on a missing `@ts-morph/common`; using the local `bun x shadcn` works.
+- The Tooltip component from shadcn requires a wrapping `TooltipProvider`.
+
+## Summary
+
+The payoff: **content written in Markdown, UI drawn in React, single-pass build, fully static output.**
