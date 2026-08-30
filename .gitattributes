@@ -1,0 +1,23 @@
+# Use LF for all text files in the repository (canonical form),
+# both on commit and on checkout, regardless of platform.
+* text=auto eol=lf
+
+# Binary assets must never be normalized.
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.webp binary
+*.avif binary
+*.gif binary
+*.bmp binary
+*.woff binary
+*.woff2 binary
+*.eot binary
+*.ttf binary
+*.otf binary
+*.pdf binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.wasm binary
