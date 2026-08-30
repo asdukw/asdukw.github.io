@@ -53,6 +53,7 @@ No test runner, linter, or formatter is configured. `bun x tsc --noEmit` 可做�
 - **Two lockfiles:** `bun.lock` is authoritative; `package-lock.json` is stale — ignore it
 - **Two `index.html` files:** root `index.html` is a stale placeholder; the real app shell is `src/index.html`
 - **路由用 HashRouter**（`#/path`），因为 GitHub Pages 不做 SPA fallback
+- favicon 由 ImageMagick 从头像生成（`magick src/assets/avatar.jpg -resize 64x64 -define icon:auto-resize=16,32,48,64 src/favicon.ico`）；`scripts/copy-favicon.ts` 在构建时复制 `dist/favicon.ico` 以便裸 `/favicon.ico` 也能访问，`src/index.ts` 内有 dev 环境的路由
 - `lucide-react` v1 已移除 `Github` 等品牌图标，用 `src/components/icons/GithubIcon.tsx` 内联 SVG
 - npm/bun 安装遇到网络问题时，使用代理端口 7897：
   ```powershell
