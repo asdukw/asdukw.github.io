@@ -16,10 +16,10 @@ export const site: SiteConfig = {
     en: "Coding and life, in writing",
   },
   description: {
-    zh: "asdukw 的个人网站：随笔与技术博客。记录代码、阅读与生活。",
+    zh: "asdukw 的个人网站：记录生活&技术博客",
     en: "asdukw's personal site: journal and tech blog on code, reading, and life.",
   },
   github: "https://github.com/asdukw",
-  mail: "hello@asdukw.dev",
-  keywords: ["blog", "tech", "随笔", "技术博客", "React", "Bun", "TypeScript"],
+  mail: "asdukw@outlook.com",
+  keywords: ["blog", "tech", "随笔", "技术博客", "博客", "asdukw", "Python", "python"],
 };
