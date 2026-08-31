@@ -1,11 +1,22 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router";
-import { Languages, Menu } from "lucide-react";
+import { Languages, LogOut, Menu, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useLang } from "@/i18n/LanguageContext";
+import { useAuth } from "@/lib/AuthContext";
 import { site } from "@/lib/site";
 import { ThemeSwitcher } from "./ThemeSwitcher";
+import { GithubIcon } from "@/components/icons/GithubIcon";
 import avatarUrl from "@/assets/avatar.jpg";
 
 const NAV = [
@@ -22,6 +33,86 @@ function navClass(isActive: boolean) {
       ? "text-foreground"
       : "text-muted-foreground hover:text-foreground"
   }`;
+}
+
+function UserButton() {
+  const { user, loading, isAdmin, login, logout } = useAuth();
+  const { t } = useLang();
+
+  if (loading) {
+    return (
+      <Button variant="ghost" size="icon-sm" disabled>
+        <div className="h-4 w-4 animate-pulse rounded-full bg-muted" />
+      </Button>
+    );
+  }
+
+  if (!user) {
+    return (
+      <Button variant="ghost" size="sm" className="gap-1.5" onClick={login}>
+        <GithubIcon className="h-4 w-4" />
+        {t.auth.signIn}
+      </Button>
+    );
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon-sm" className="rounded-full">
+          <Avatar size="sm">
+            <AvatarImage src={user.avatar_url} alt={user.login} />
+            <AvatarFallback>{user.login.slice(0, 2).toUpperCase()}</AvatarFallback>
+          </Avatar>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuLabel className="font-normal">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-sm font-medium leading-none">{user.name || user.login}</span>
+            <span className="text-xs leading-none text-muted-foreground">@{user.login}</span>
+          </div>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {isAdmin && (
+          <DropdownMenuItem disabled>
+            <Shield className="h-4 w-4" />
+            {t.auth.admin}
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem onClick={logout}>
+          <LogOut className="h-4 w-4" />
+          {t.auth.signOut}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function MobileUserButton() {
+  const { user, loading, login } = useAuth();
+  const { t } = useLang();
+
+  if (loading) return null;
+
+  if (!user) {
+    return (
+      <Button variant="outline" size="sm" className="gap-2" onClick={login}>
+        <GithubIcon className="h-4 w-4" />
+        {t.auth.signIn}
+      </Button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-3 rounded-md border border-border/60 px-3 py-2">
+      <Avatar size="sm">
+        <AvatarImage src={user.avatar_url} alt={user.login} />
+        <AvatarFallback>{user.login.slice(0, 2).toUpperCase()}</AvatarFallback>
+      </Avatar>
+      <span className="text-sm font-medium">{user.name || user.login}</span>
+    </div>
+  );
 }
 
 export function Header() {
@@ -62,6 +153,10 @@ export function Header() {
             {lang === "zh" ? "EN" : "中文"}
           </Button>
 
+          <div className="hidden md:block">
+            <UserButton />
+          </div>
+
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon-sm" className="md:hidden" aria-label="打开菜单">
@@ -93,6 +188,9 @@ export function Header() {
                   </NavLink>
                 ))}
               </nav>
+              <div className="border-t border-border/60 p-2">
+                <MobileUserButton />
+              </div>
             </SheetContent>
           </Sheet>
         </div>

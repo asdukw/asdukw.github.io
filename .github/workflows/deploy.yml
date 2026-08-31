@@ -17,6 +17,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      BUN_PUBLIC_AUTH_API_URL: ${{ secrets.BUN_PUBLIC_AUTH_API_URL }}
+      BUN_PUBLIC_ADMIN_USER_ID: ${{ secrets.BUN_PUBLIC_ADMIN_USER_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2

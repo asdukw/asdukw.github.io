@@ -1,0 +1,8 @@
+name = "asdukw-auth"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+[vars]
+GH_CLIENT_ID = "Ov23liqTEJqdnOLnhcNv"
+GH_CALLBACK_URL = "https://github-oauth.zhouzongyuu.workers.dev/api/auth/callback"
+SITE_URL = "https://asdukw.github.io/#/"

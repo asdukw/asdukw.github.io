@@ -41,6 +41,11 @@ export interface Dict {
     intro2: string;
     contactTitle: string;
   };
+  auth: {
+    signIn: string;
+    signOut: string;
+    admin: string;
+  };
 }
 
 export const zh: Dict = {
@@ -92,6 +97,11 @@ export const zh: Dict = {
     intro2: "白天写代码，晚上写文字。这里记录我的技术与生活。",
     contactTitle: "联系方式",
   },
+  auth: {
+    signIn: "登录",
+    signOut: "退出登录",
+    admin: "管理员",
+  },
 };
 
 export const en: Dict = {
@@ -142,6 +152,11 @@ export const en: Dict = {
     intro1: "Hi, I'm asdukw, a software engineer.",
     intro2: "I write code by day and words by night. This site holds my notes on tech and life.",
     contactTitle: "Contact",
+  },
+  auth: {
+    signIn: "Sign in",
+    signOut: "Sign out",
+    admin: "Admin",
   },
 };
 
