@@ -56,7 +56,7 @@ async function fetchGitHubUser(token: string) {
 }
 
 const GH_CLIENT_ID = process.env.GH_CLIENT_ID || "";
-const SITE_URL = "http://localhost:3000/#/";
+const SITE_URL = "http://localhost:3000/";
 
 const server = serve({
   routes: {

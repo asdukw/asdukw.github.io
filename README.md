@@ -5,7 +5,7 @@
 ## 技术栈
 
 - **Bun** — 运行时与打包器
-- **React 19 + react-router** — 前端框架与路由（HashRouter）
+- **React 19 + react-router** — 前端框架与路由（BrowserRouter，干净 URL）
 - **Tailwind CSS v4 + shadcn/ui** — 样式与 UI 组件
 - **MDX** — 文章内容（`@mdx-js/mdx` 构建时编译为静态 HTML）
 

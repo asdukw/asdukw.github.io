@@ -1,4 +1,4 @@
-import { HashRouter, Route, Routes } from "react-router";
+import { BrowserRouter, Route, Routes } from "react-router";
 import "./styles.css";
 import { ThemeProvider } from "@/lib/ThemeContext";
 import { AuthProvider } from "@/lib/AuthContext";
@@ -18,7 +18,7 @@ export function App() {
       <ThemeProvider>
         <LanguageProvider>
           <TooltipProvider>
-            <HashRouter>
+            <BrowserRouter>
               <Routes>
                 <Route element={<Layout />}>
                   <Route index element={<Home />} />
@@ -31,7 +31,7 @@ export function App() {
                   <Route path="*" element={<NotFound />} />
                 </Route>
               </Routes>
-            </HashRouter>
+            </BrowserRouter>
           </TooltipProvider>
         </LanguageProvider>
       </ThemeProvider>

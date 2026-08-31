@@ -9,7 +9,7 @@
     "css": "bun x @tailwindcss/cli -i ./src/index.css -o ./src/styles.css --minify",
     "css:watch": "bun x @tailwindcss/cli -i ./src/index.css -o ./src/styles.css --watch",
     "dev": "bun run css && bun --hot src/index.ts",
-    "build": "bun scripts/build-content.ts && bun run css && bun build ./src/index.html --outdir=dist --sourcemap --target=browser --minify --define:process.env.NODE_ENV='\"production\"' --env='BUN_PUBLIC_*' && bun scripts/copy-favicon.ts",
+    "build": "bun scripts/build-content.ts && bun run css && bun build ./src/index.html --outdir=dist --sourcemap --target=browser --minify --define:process.env.NODE_ENV='\"production\"' --env='BUN_PUBLIC_*' && bun scripts/copy-favicon.ts && bun scripts/copy-404.ts",
     "start": "NODE_ENV=production bun src/index.ts",
     "dev:worker": "cd worker && wrangler dev"
   },
