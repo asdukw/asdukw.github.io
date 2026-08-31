@@ -52,7 +52,8 @@ No test runner, linter, or formatter is configured. `bun x tsc --noEmit` 可做�
 - HMR uses `import.meta.hot.data` pattern in `frontend.tsx`
 - **Two lockfiles:** `bun.lock` is authoritative; `package-lock.json` is stale — ignore it
 - **Two `index.html` files:** root `index.html` is a stale placeholder; the real app shell is `src/index.html`
-- **路由用 `BrowserRouter`**（干净 URL，无 `#`）；GitHub Pages 不做 SPA fallback，靠 `scripts/copy-404.ts` 生成 `dist/404.html`（`<base href="/">` + 内联 assets）来兜底深层链接/刷新的 404，SPA 客户端路由再按当前 pathname 渲染对应页面
+- **路由用 `BrowserRouter`**（干净 URL，无 `#`）；部署到 Cloudflare Pages（`asdukw.pages.dev`），`scripts/copy-404.ts` 生成 `dist/_redirects`（`/* /index.html 200`）做 SPA fallback，深层链接/刷新按当前 pathname 渲染对应页面。**不要**生成 `dist/404.html`——Cloudflare Pages 只有在没有顶层 `404.html` 时才启用原生 SPA 渲染
+- **生产站点**：`https://asdukw.pages.dev`（Cloudflare Pages 项目 `asdukw`，direct upload）；OAuth Worker 域名 `https://github-oauth.zhouzongyuu.workers.dev`，`SITE_URL`（`worker/wrangler.toml`）需与生产站点保持一致
 - favicon 由 ImageMagick 从头像生成（`magick src/assets/avatar.jpg -resize 64x64 -define icon:auto-resize=16,32,48,64 src/favicon.ico`）；`scripts/copy-favicon.ts` 在构建时复制 `dist/favicon.ico` 以便裸 `/favicon.ico` 也能访问，`src/index.ts` 内有 dev 环境的路由
 - `lucide-react` v1 已移除 `Github` 等品牌图标，用 `src/components/icons/GithubIcon.tsx` 内联 SVG
 - npm/bun 安装遇到网络问题时，使用代理端口 7897：
@@ -62,6 +63,8 @@ No test runner, linter, or formatter is configured. `bun x tsc --noEmit` 可做�
 
 ## CI/CD
 
-- GitHub Actions deploys `dist/` to GitHub Pages on push to `master` (`deploy.yml`)
-- CI uses `oven-sh/setup-bun@v2`, runs `bun install` then `bun run build`（已包含内容与 CSS 编译）
+- GitHub Actions 在 push 到 `master` 时构建并部署 `dist/` 到 Cloudflare Pages（`deploy.yml`）
+- CI 用 `oven-sh/setup-bun@v2`，跑 `bun install` 然后 `bun run build`（已包含内容与 CSS 编译），再用 wrangler `pages deploy`
+- 需要 GitHub secrets：`BUN_PUBLIC_AUTH_API_URL`、`BUN_PUBLIC_ADMIN_USER_ID`、`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`
+- 本地手动部署：`bun run deploy:pages`（先 build 再 wrangler pages deploy）
 - 新增文章后：本地跑 `bun run build:content` 生成内容并提交

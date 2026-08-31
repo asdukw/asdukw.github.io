@@ -1,6 +1,6 @@
 # asdukw · 随笔与技术博客
 
-基于 Bun + React + shadcn/ui 的个人网站，中英双语，GitHub Pages 静态部署。
+基于 Bun + React + shadcn/ui 的个人网站，中英双语，Cloudflare Pages 静态部署（`https://asdukw.pages.dev`）。
 
 ## 技术栈
 
@@ -28,4 +28,4 @@ bun start                   # 仅启动 Bun 服务器
 
 ## 部署
 
-`dist/` 由 GitHub Actions 自动构建并部署到 GitHub Pages（push 到 `master` 触发）。
+`dist/` 由 GitHub Actions 自动构建并部署到 Cloudflare Pages（push 到 `master` 触发）。手动部署：`bun run deploy:pages`。
