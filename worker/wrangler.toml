@@ -1,4 +1,4 @@
-name = "asdukw-auth"
+name = "github-oauth"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
 

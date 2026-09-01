@@ -48,7 +48,8 @@ No test runner, linter, or formatter is configured. `bun x tsc --noEmit` 可做�
 ## Gotchas
 
 - Server routes are defined inline in `src/index.ts` — no separate router file
-- Env vars prefixed `BUN_PUBLIC_` are exposed to client via `--env` flag
+- Env vars prefixed `BUN_PUBLIC_` are exposed to client via `--env` flag (also configured in `bunfig.toml` `[serve.static]`)
+- Path alias `@/*` maps to `./src/*` (defined in `tsconfig.json`)
 - HMR uses `import.meta.hot.data` pattern in `frontend.tsx`
 - **Two lockfiles:** `bun.lock` is authoritative; `package-lock.json` is stale — ignore it
 - **Two `index.html` files:** root `index.html` is a stale placeholder; the real app shell is `src/index.html`
