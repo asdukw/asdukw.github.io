@@ -1,10 +1,10 @@
 # asdukw FastAPI backend
 
-This service replaces the Cloudflare Worker / GitHub Discussions data path with
-a Python API backed by Supabase Postgres. GitHub OAuth is retained as the
-identity provider, but the short-lived GitHub access token is used only during
-the callback and is not stored. Sessions, users, comments, reactions,
-bookmarks, and reading progress are stored in Postgres.
+This service provides the site's comments and account API with FastAPI backed by
+Supabase Postgres. GitHub OAuth is retained as the identity provider, but the
+short-lived GitHub access token is used only during the callback and is not
+stored. Sessions, users, comments, reactions, bookmarks, and reading progress
+are stored in Postgres.
 
 Supabase is used here as managed Postgres through the server-side SQLAlchemy
 connection. The browser never receives `DATABASE_URL`; API authorization and
@@ -32,18 +32,19 @@ Apply the versioned schema to Supabase:
 alembic upgrade head
 ```
 
-To preserve the existing site comments before switching the frontend, set a
-GitHub token with repository Discussions read access in
+To preserve comments from the former GitHub-based service before switching the
+frontend, set a temporary GitHub token with repository read access in
 `GITHUB_MIGRATION_TOKEN`, then run the idempotent importer:
 
 ```powershell
-python -m scripts.import_github_discussions --owner asdukw --repo asdukw.github.io
+python -m scripts.import_legacy_comments --owner asdukw --repo asdukw.github.io
 ```
 
-It imports only discussions whose title matches `Comments: blog/slug` or
-`Comments: tech/slug`, uses each GitHub comment node id as a de-duplication key,
-and imports available `THUMBS_UP` users. It can be run again to pick up newly
-added public reactions. Run it only after `alembic upgrade head`.
+It imports only legacy threads whose title matches `Comments: blog/slug` or
+`Comments: tech/slug`, uses each source comment node id as a de-duplication key,
+and imports available thumbs-up users. It can be run again to pick up newly
+added public reactions. Run it only after `alembic upgrade head`; remove the
+temporary token after the one-off migration.
 
 Start the API:
 
@@ -57,7 +58,7 @@ Useful endpoints:
 - `GET /readyz` — database readiness
 - `/docs` — FastAPI OpenAPI UI
 - `/api/auth/*` — GitHub login/session lifecycle
-- `/api/discussions/{category}/{slug}` — comments and reactions
+- `/api/comments/{category}/{slug}` — comments and reactions
 - `/api/me/*` — bookmarks and reading progress
 - `/api/admin/comments/{comment_id}` — admin moderation
 

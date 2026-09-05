@@ -14,15 +14,13 @@ from ..schemas import (
     AddCommentResponse,
     AuthorResponse,
     CommentResponse,
-    DiscussionEnvelope,
-    DiscussionReference,
-    DiscussionResponse,
+    CommentsEnvelope,
     ReactionRequest,
     ReactionResponse,
     ReactionSummary,
 )
 
-router = APIRouter(prefix="/api/discussions", tags=["comments"])
+router = APIRouter(prefix="/api/comments", tags=["comments"])
 
 
 def author_response(user: User | None) -> AuthorResponse | None:
@@ -44,26 +42,15 @@ def comment_response(
 ) -> CommentResponse:
     return CommentResponse(
         id=comment.id,
-        nodeId=str(comment.id),
         body=comment.body,
         createdAt=comment.created_at,
         updatedAt=comment.updated_at,
-        url="",
         parentId=comment.parent_id,
         author=author_response(comment.author),
         reactions=ReactionSummary(
             thumbsUp=thumbs_up if thumbs_up is not None else len(comment.reactions),
             viewerHasReacted=liked,
         ),
-    )
-
-
-def discussion_reference(post: Post, category: str, slug: str) -> DiscussionReference:
-    return DiscussionReference(
-        number=0,
-        title=f"Comments: {category}/{slug}",
-        url="",
-        nodeId=f"post:{post.id}",
     )
 
 
@@ -86,18 +73,18 @@ async def load_reactions_for_viewer(
 
 @router.get(
     "/{category}/{slug}",
-    response_model=DiscussionEnvelope,
+    response_model=CommentsEnvelope,
 )
 async def get_comments(
     category: str = Path(...),
     slug: str = Path(...),
     db: AsyncSession = Depends(get_db),
     user: User | None = Depends(get_current_user_optional),
-) -> DiscussionEnvelope:
+) -> CommentsEnvelope:
     validate_post_key(category, slug)
     post = await find_post(db, category, slug)
     if post is None:
-        return DiscussionEnvelope(discussion=None)
+        return CommentsEnvelope(comments=[])
 
     result = await db.execute(
         select(Comment)
@@ -107,16 +94,13 @@ async def get_comments(
     )
     comments = list(result.scalars().all())
     liked_ids = await load_reactions_for_viewer(db, comments, user)
-    return DiscussionEnvelope(
-        discussion=DiscussionResponse(
-            **discussion_reference(post, category, slug).model_dump(),
-            comments=[comment_response(comment, comment.id in liked_ids) for comment in comments],
-        )
+    return CommentsEnvelope(
+        comments=[comment_response(comment, comment.id in liked_ids) for comment in comments]
     )
 
 
 @router.post(
-    "/{category}/{slug}/comments",
+    "/{category}/{slug}",
     response_model=AddCommentResponse,
     status_code=status.HTTP_201_CREATED,
 )
@@ -151,13 +135,12 @@ async def add_comment(
     await db.refresh(comment)
     comment.author = user
     return AddCommentResponse(
-        discussion=discussion_reference(post, category, slug),
         comment=comment_response(comment, thumbs_up=0),
     )
 
 
 @router.post(
-    "/{category}/{slug}/comments/{comment_id}/reaction",
+    "/{category}/{slug}/{comment_id}/reaction",
     response_model=ReactionResponse,
 )
 async def set_comment_reaction(

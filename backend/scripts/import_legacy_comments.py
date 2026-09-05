@@ -21,11 +21,11 @@ load_dotenv("../.env")
 
 
 GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"
-DISCUSSION_PREFIX = "Comments: "
+LEGACY_THREAD_PREFIX = "Comments: "
 
 
-DISCUSSIONS_QUERY = """
-query ImportDiscussions($owner: String!, $name: String!, $cursor: String) {
+LEGACY_THREADS_QUERY = """
+query ImportLegacyCommentThreads($owner: String!, $name: String!, $cursor: String) {
   repository(owner: $owner, name: $name) {
     discussions(first: 100, after: $cursor, orderBy: {field: CREATED_AT, direction: ASC}) {
       pageInfo { hasNextPage endCursor }
@@ -72,8 +72,8 @@ query ImportDiscussions($owner: String!, $name: String!, $cursor: String) {
 """
 
 
-COMMENTS_QUERY = """
-query ImportDiscussionComments($owner: String!, $name: String!, $number: Int!, $cursor: String) {
+LEGACY_THREAD_COMMENTS_QUERY = """
+query ImportLegacyThreadComments($owner: String!, $name: String!, $number: Int!, $cursor: String) {
   repository(owner: $owner, name: $name) {
     discussion(number: $number) {
       comments(first: 100, after: $cursor) {
@@ -115,10 +115,10 @@ query ImportDiscussionComments($owner: String!, $name: String!, $number: Int!, $
 """
 
 
-def parse_target(title: str) -> tuple[str, str] | None:
-    if not title.startswith(DISCUSSION_PREFIX):
+def parse_legacy_thread_title(title: str) -> tuple[str, str] | None:
+    if not title.startswith(LEGACY_THREAD_PREFIX):
         return None
-    target = title[len(DISCUSSION_PREFIX) :]
+    target = title[len(LEGACY_THREAD_PREFIX) :]
     category, separator, slug = target.partition("/")
     if (
         not separator
@@ -146,7 +146,7 @@ async def graphql(
             "Accept": "application/vnd.github+json",
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
-            "User-Agent": "asdukw-discussion-import",
+            "User-Agent": "asdukw-legacy-comment-import",
         },
         json={"query": query, "variables": variables},
     )
@@ -268,11 +268,11 @@ async def import_comment(
     return is_new, reaction_count
 
 
-async def import_repository(owner: str, repo: str, token: str) -> None:
+async def import_legacy_comments(owner: str, repo: str, token: str) -> None:
     session_factory = get_session_factory()
     imported_comments = 0
     imported_reactions = 0
-    skipped_discussions = 0
+    skipped_threads = 0
     cursor: str | None = None
 
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -280,20 +280,20 @@ async def import_repository(owner: str, repo: str, token: str) -> None:
             data = await graphql(
                 client,
                 token,
-                DISCUSSIONS_QUERY,
+                LEGACY_THREADS_QUERY,
                 {"owner": owner, "name": repo, "cursor": cursor},
             )
-            discussions = data.get("repository", {}).get("discussions")
-            if not isinstance(discussions, dict):
-                raise RuntimeError("GitHub repository does not expose Discussions")
+            thread_connection = data.get("repository", {}).get("discussions")
+            if not isinstance(thread_connection, dict):
+                raise RuntimeError("GitHub repository does not expose legacy comment threads")
 
             async with session_factory() as db:
-                for discussion in discussions.get("nodes", []):
-                    if not isinstance(discussion, dict):
+                for thread in thread_connection.get("nodes", []):
+                    if not isinstance(thread, dict):
                         continue
-                    target = parse_target(str(discussion.get("title", "")))
+                    target = parse_legacy_thread_title(str(thread.get("title", "")))
                     if target is None:
-                        skipped_discussions += 1
+                        skipped_threads += 1
                         continue
                     category, slug = target
                     post = await db.scalar(
@@ -317,7 +317,7 @@ async def import_repository(owner: str, repo: str, token: str) -> None:
                             imported_comments += int(is_new)
                             imported_reactions += reaction_count
 
-                    comments = discussion.get("comments", {})
+                    comments = thread.get("comments", {})
                     if not isinstance(comments, dict):
                         comments = {}
                     await import_comment_page(comments)
@@ -327,17 +327,17 @@ async def import_repository(owner: str, repo: str, token: str) -> None:
                         comment_page_info = {}
                     comment_cursor = comment_page_info.get("endCursor")
                     while comment_page_info.get("hasNextPage"):
-                        discussion_number = discussion.get("number")
-                        if not isinstance(discussion_number, int):
-                            raise RuntimeError("GitHub returned a discussion without a number")
+                        thread_number = thread.get("number")
+                        if not isinstance(thread_number, int):
+                            raise RuntimeError("GitHub returned a legacy comment thread without a number")
                         comment_data = await graphql(
                             client,
                             token,
-                            COMMENTS_QUERY,
+                            LEGACY_THREAD_COMMENTS_QUERY,
                             {
                                 "owner": owner,
                                 "name": repo,
-                                "number": discussion_number,
+                                "number": thread_number,
                                 "cursor": comment_cursor,
                             },
                         )
@@ -355,7 +355,7 @@ async def import_repository(owner: str, repo: str, token: str) -> None:
                         comment_cursor = comment_page_info.get("endCursor")
                 await db.commit()
 
-            page_info = discussions.get("pageInfo", {})
+            page_info = thread_connection.get("pageInfo", {})
             if not page_info.get("hasNextPage"):
                 break
             cursor = page_info.get("endCursor")
@@ -365,21 +365,21 @@ async def import_repository(owner: str, repo: str, token: str) -> None:
     print(
         "Imported "
         f"{imported_comments} comments and {imported_reactions} thumbs-up reactions; "
-        f"skipped {skipped_discussions} non-site discussions."
+        f"skipped {skipped_threads} non-site legacy threads."
     )
 
 
 def parse_args() -> argparse.Namespace:
     settings = get_settings()
     parser = argparse.ArgumentParser(
-        description="Import the site's GitHub Discussions into the FastAPI database."
+        description="Import legacy GitHub comment threads into the FastAPI database."
     )
     parser.add_argument("--owner", default="asdukw")
     parser.add_argument("--repo", default="asdukw.github.io")
     parser.add_argument(
         "--token-env",
         default="GITHUB_MIGRATION_TOKEN",
-        help="Environment variable containing a GitHub token with Discussions read access.",
+        help="Environment variable containing a GitHub token for the one-off legacy import.",
     )
     parser.set_defaults(database_configured=bool(settings.database_url))
     return parser.parse_args()
@@ -394,7 +394,7 @@ def main() -> None:
         raise SystemExit(
             f"{args.token_env} is not configured; refusing to run without a GitHub token."
         )
-    asyncio.run(import_repository(args.owner, args.repo, token))
+    asyncio.run(import_legacy_comments(args.owner, args.repo, token))
 
 
 if __name__ == "__main__":

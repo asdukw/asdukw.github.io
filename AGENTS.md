@@ -2,7 +2,7 @@
 
 ## Runtime
 
-Bun, not Node.js. All commands use `bun`.
+前端使用 Bun（不是 Node.js）；后端使用 Python 3.11+。前端命令使用 `bun`，后端命令在 `backend/` 目录执行。
 
 ## Commands
 
@@ -14,7 +14,7 @@ Bun, not Node.js. All commands use `bun`.
 - `bun run css` / `bun run css:watch` — 用 Tailwind v4 CLI 把 `src/index.css` 编译为 `src/styles.css`
 - `bun start` — production server（`NODE_ENV=production`；注意：只起 Bun 服务器，静态资源请用 `dist/` 部署到 GitHub Pages）
 
-No test runner, linter, or formatter is configured. `bun x tsc --noEmit` 可做类型检查。
+前端没有单独的 test runner、linter 或 formatter，`bun x tsc --noEmit` 可做类型检查；后端使用 `pytest` 和 `ruff`，命令在 `backend/` 目录执行。
 
 ## Architecture
 
@@ -26,8 +26,8 @@ No test runner, linter, or formatter is configured. `bun x tsc --noEmit` 可做�
 - `src/components/` — `layout/`（Header/Footer/Layout）、`blog/`（文章卡片/列表/TOC/正文）、`home/`、`ui/`（shadcn）、`icons/`
 - `src/i18n/` — 中英双语：`LanguageContext.tsx`（Provider + `useLang`）、`dictionaries.ts`（zh/en 文案，`Dict` 接口约束）
 - `src/components/blog/CommentsSection.tsx` — 文章评论列表、发表评论与点赞 UI
-- `src/lib/discussions.ts` — 前端评论 API client 与类型
-- `src/server/discussions.ts` — GitHub Discussions REST/GraphQL 适配层，由 Bun server 与 OAuth Worker 共用
+- `src/lib/comments.ts` — 前端评论 API client 与类型
+- `backend/` — FastAPI API、SQLAlchemy 模型、Alembic migration 与历史评论导入脚本
 - `src/generated/content.ts` — **自动生成**，由 `scripts/build-content.ts` 产出，需要提交到 git（否则 dev 无内容）
 - `src/styles.css` — **自动生成**，由 Tailwind CLI 从 `src/index.css` 编译，需要提交到 git
 
@@ -58,7 +58,7 @@ No test runner, linter, or formatter is configured. `bun x tsc --noEmit` 可做�
 - **Two `index.html` files:** root `index.html` is a stale placeholder; the real app shell is `src/index.html`
 - **路由用 `BrowserRouter`**（干净 URL，无 `#`）；部署到 Cloudflare Pages（`asdukw.pages.dev`），`scripts/copy-404.ts` 生成 `dist/_redirects`（`/* /index.html 200`）做 SPA fallback，深层链接/刷新按当前 pathname 渲染对应页面。**不要**生成 `dist/404.html`——Cloudflare Pages 只有在没有顶层 `404.html` 时才启用原生 SPA 渲染
 - **生产站点**：`https://asdukw.pages.dev`（Cloudflare Pages 项目 `asdukw`，direct upload）；OAuth Worker 域名 `https://github-oauth.zhouzongyuu.workers.dev`，`SITE_URL`（`worker/wrangler.toml`）需与生产站点保持一致
-- **评论区**：使用 `asdukw/asdukw.github.io` 的 GitHub Discussions `general` 分类；首次评论时按 `category/slug` 懒创建 Discussion。OAuth 登录需要 `write:discussion` scope，旧会话需要重新授权
+- **评论区**：使用 FastAPI + Supabase Postgres；按 `category/slug` 懒创建文章索引。GitHub 只作为 OAuth 身份提供方，OAuth 不需要评论写权限
 - favicon 由 ImageMagick 从头像生成（`magick src/assets/avatar.jpg -resize 64x64 -define icon:auto-resize=16,32,48,64 src/favicon.ico`）；`scripts/copy-favicon.ts` 在构建时复制 `dist/favicon.ico` 以便裸 `/favicon.ico` 也能访问，`src/index.ts` 内有 dev 环境的路由
 - `lucide-react` v1 已移除 `Github` 等品牌图标，用 `src/components/icons/GithubIcon.tsx` 内联 SVG
 - npm/bun 安装遇到网络问题时，使用代理端口 7897：
@@ -68,10 +68,11 @@ No test runner, linter, or formatter is configured. `bun x tsc --noEmit` 可做�
 
 ## CI/CD
 
-- GitHub Actions 使用两个独立 workflow：`deploy.yml` 部署 Cloudflare Pages，`deploy-worker.yml` 部署 OAuth Worker；两者都在 `master` 上按相关路径变化触发，也支持手动触发。Worker workflow 同时监听 `src/server/**`
+- GitHub Actions 使用独立 workflow：`deploy.yml` 部署 Cloudflare Pages，`backend.yml` 检查 FastAPI，`deploy-worker.yml` 仅保留旧 OAuth Worker fallback；它们都在 `master` 上按相关路径变化触发，也支持手动触发
 - Pages CI 用 `oven-sh/setup-bun@v2`，跑 `bun install --frozen-lockfile` 和 `bun run build`（已包含内容与 CSS 编译），再用 wrangler `pages deploy`
 - Worker CI 在 `worker/` 下跑 `bun install --frozen-lockfile`、`bun x tsc --noEmit` 和 `bun x wrangler deploy`
-- 需要 GitHub secrets：`BUN_PUBLIC_AUTH_API_URL`、`BUN_PUBLIC_ADMIN_USER_ID`、`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`
+- Backend CI 在 `backend/` 下安装 Python 依赖，执行 Ruff、pytest、import 检查和 Alembic 离线 SQL 检查
+- 需要 GitHub secrets：`BUN_PUBLIC_API_URL`、`BUN_PUBLIC_AUTH_API_URL`（旧 fallback）、`BUN_PUBLIC_ADMIN_USER_ID`、`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN` 需要同时具备 Pages 部署权限和 Workers Script 部署权限；也可以拆成两个权限更窄的 token，分别配置到两个 workflow
 - 本地 Wrangler 可从根目录 `.env` 读取 `CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID`；`worker/package.json` 的部署脚本显式使用 `../.env`，不要把 Token 写入 `wrangler.toml`
 - 本地手动部署：`bun run deploy:pages`（先 build 再 wrangler pages deploy）或 `bun run deploy:worker`

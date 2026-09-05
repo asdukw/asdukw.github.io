@@ -1,7 +1,7 @@
 import type { Category } from "@/lib/posts";
 import { getAuthApiBase } from "@/lib/auth";
 
-export interface DiscussionAuthor {
+export interface CommentAuthor {
   id: string;
   login: string;
   avatarUrl: string;
@@ -9,46 +9,35 @@ export interface DiscussionAuthor {
   htmlUrl: string;
 }
 
-export interface DiscussionComment {
+export interface ArticleComment {
   id: number;
-  nodeId: string;
   body: string;
   createdAt: string;
   updatedAt: string;
-  url: string;
   parentId: number | null;
-  author: DiscussionAuthor | null;
+  author: CommentAuthor | null;
   reactions: {
     thumbsUp: number;
     viewerHasReacted: boolean;
   };
 }
 
-export interface Discussion {
-  number: number;
-  title: string;
-  url: string;
-  nodeId: string;
-  comments: DiscussionComment[];
+export interface CommentsEnvelope {
+  comments: ArticleComment[];
 }
 
-export class DiscussionApiError extends Error {
+export class CommentsApiError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
   ) {
     super(code);
-    this.name = "DiscussionApiError";
+    this.name = "CommentsApiError";
   }
 }
 
-interface DiscussionResponse {
-  discussion: Discussion | null;
-}
-
 interface AddCommentResponse {
-  discussion: Pick<Discussion, "number" | "title" | "url">;
-  comment: DiscussionComment;
+  comment: ArticleComment;
 }
 
 interface LikeResponse {
@@ -80,8 +69,8 @@ async function getCsrfToken(base: string): Promise<string | null> {
   }
 }
 
-function targetPath(category: Category, slug: string): string {
-  return `/api/discussions/${encodeURIComponent(category)}/${encodeURIComponent(slug)}`;
+function commentsPath(category: Category, slug: string): string {
+  return `/api/comments/${encodeURIComponent(category)}/${encodeURIComponent(slug)}`;
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -112,40 +101,40 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
         : typeof data === "object" && data !== null && "detail" in data
           ? String((data as { detail?: unknown }).detail ?? "request_failed")
           : "request_failed";
-    throw new DiscussionApiError(response.status, code);
+    throw new CommentsApiError(response.status, code);
   }
 
   return data as T;
 }
 
-export async function fetchDiscussion(
+export async function fetchComments(
   category: Category,
   slug: string,
-): Promise<Discussion | null> {
-  const data = await request<DiscussionResponse>(targetPath(category, slug));
-  return data.discussion;
+): Promise<ArticleComment[]> {
+  const data = await request<CommentsEnvelope>(commentsPath(category, slug));
+  return data.comments;
 }
 
-export async function addDiscussionComment(
+export async function addComment(
   category: Category,
   slug: string,
   body: string,
 ): Promise<AddCommentResponse> {
-  return request<AddCommentResponse>(`${targetPath(category, slug)}/comments`, {
+  return request<AddCommentResponse>(`${commentsPath(category, slug)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ body }),
   });
 }
 
-export async function setDiscussionCommentLike(
+export async function setCommentLike(
   category: Category,
   slug: string,
   commentId: number,
   liked: boolean,
 ): Promise<LikeResponse> {
   return request<LikeResponse>(
-    `${targetPath(category, slug)}/comments/${commentId}/reaction`,
+    `${commentsPath(category, slug)}/${commentId}/reaction`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

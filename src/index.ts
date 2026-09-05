@@ -1,12 +1,5 @@
 import { serve } from "bun";
 import index from "./index.html";
-import {
-  addDiscussionComment,
-  getDiscussion,
-  GitHubApiError,
-  setDiscussionCommentLike,
-  type DiscussionConfig,
-} from "./server/discussions";
 
 function parseCookies(header: string | null): Record<string, string> {
   const cookies: Record<string, string> = {};
@@ -66,156 +59,6 @@ async function fetchGitHubUser(token: string) {
   return res.json();
 }
 
-function localDiscussionConfig(): DiscussionConfig {
-  return {
-    owner: process.env.GH_REPO_OWNER || "asdukw",
-    repo: process.env.GH_REPO_NAME || "asdukw.github.io",
-    categorySlug: process.env.GH_DISCUSSION_CATEGORY || "general",
-  };
-}
-
-function validDiscussionTarget(category: string, slug: string): boolean {
-  return /^(blog|tech)$/.test(category) && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(slug);
-}
-
-function localDiscussionError(error: unknown, missingCode: string): Response {
-  let status = 502;
-  let code = "github_error";
-
-  if (error instanceof GitHubApiError) {
-    const message = error.message.toLowerCase();
-    if (error.status === 401) {
-      status = 401;
-      code = "auth_required";
-    } else if (
-      error.status === 403 ||
-      message.includes("resource not accessible") ||
-      message.includes("write:discussion") ||
-      message.includes("must have push access")
-    ) {
-      status = 403;
-      code = "discussion_permission_required";
-    } else if (error.status === 404) {
-      status = missingCode === "discussions_unavailable" ? 503 : 404;
-      code = missingCode;
-    } else if (
-      error.status === 410 ||
-      message.includes("discussion category") ||
-      message.includes("discussions are disabled")
-    ) {
-      status = 503;
-      code = "discussions_unavailable";
-    }
-  }
-
-  return Response.json({ error: code }, { status });
-}
-
-async function handleLocalDiscussionGet(
-  request: Request,
-  category: string,
-  slug: string,
-): Promise<Response> {
-  if (!validDiscussionTarget(category, slug)) {
-    return Response.json({ error: "invalid_target" }, { status: 400 });
-  }
-
-  const token = parseCookies(request.headers.get("cookie"))["gh_session"];
-  try {
-    const discussion = await getDiscussion(localDiscussionConfig(), category, slug, token);
-    return Response.json({ discussion });
-  } catch (error) {
-    console.error("Discussion fetch error:", error);
-    return localDiscussionError(error, "discussions_unavailable");
-  }
-}
-
-async function handleLocalDiscussionComment(
-  request: Request,
-  category: string,
-  slug: string,
-): Promise<Response> {
-  if (!validDiscussionTarget(category, slug)) {
-    return Response.json({ error: "invalid_target" }, { status: 400 });
-  }
-
-  const token = parseCookies(request.headers.get("cookie"))["gh_session"];
-  if (!token) return Response.json({ error: "auth_required" }, { status: 401 });
-
-  let payload: unknown;
-  try {
-    payload = await request.json();
-  } catch {
-    payload = null;
-  }
-  const body =
-    typeof payload === "object" && payload !== null && "body" in payload
-      ? (payload as { body?: unknown }).body
-      : undefined;
-  const text = typeof body === "string" ? body.trim() : "";
-  if (!text || text.length > 5000) {
-    return Response.json({ error: "invalid_comment" }, { status: 400 });
-  }
-
-  try {
-    const result = await addDiscussionComment(
-      localDiscussionConfig(),
-      category,
-      slug,
-      text,
-      token,
-    );
-    return Response.json(result, { status: 201 });
-  } catch (error) {
-    console.error("Discussion comment error:", error);
-    return localDiscussionError(error, "discussion_not_found");
-  }
-}
-
-async function handleLocalDiscussionReaction(
-  request: Request,
-  category: string,
-  slug: string,
-  commentId: string,
-): Promise<Response> {
-  if (!validDiscussionTarget(category, slug)) {
-    return Response.json({ error: "invalid_target" }, { status: 400 });
-  }
-
-  const token = parseCookies(request.headers.get("cookie"))["gh_session"];
-  if (!token) return Response.json({ error: "auth_required" }, { status: 401 });
-
-  const numericId = Number(commentId);
-  let payload: unknown;
-  try {
-    payload = await request.json();
-  } catch {
-    payload = null;
-  }
-  const liked =
-    typeof payload === "object" && payload !== null && "liked" in payload
-      ? (payload as { liked?: unknown }).liked
-      : undefined;
-  if (!Number.isSafeInteger(numericId) || numericId <= 0 || typeof liked !== "boolean") {
-    return Response.json({ error: "invalid_reaction" }, { status: 400 });
-  }
-
-  try {
-    const result = await setDiscussionCommentLike(
-      localDiscussionConfig(),
-      category,
-      slug,
-      numericId,
-      liked,
-      token,
-    );
-    return Response.json(result);
-  } catch (error) {
-    console.error("Discussion reaction error:", error);
-    return localDiscussionError(error, "discussion_not_found");
-  }
-}
-
 const GH_CLIENT_ID = process.env.GH_CLIENT_ID || "";
 const SITE_URL = "http://localhost:3000/";
 const LOCAL_CALLBACK_URL = "http://localhost:3000/api/auth/callback";
@@ -241,7 +84,7 @@ const server = serve({
         const state = generateState();
         const authorizeUrl = new URL("https://github.com/login/oauth/authorize");
         authorizeUrl.searchParams.set("client_id", GH_CLIENT_ID);
-        authorizeUrl.searchParams.set("scope", "read:user write:discussion");
+        authorizeUrl.searchParams.set("scope", "read:user");
         authorizeUrl.searchParams.set("state", state);
         authorizeUrl.searchParams.set("redirect_uri", LOCAL_CALLBACK_URL);
 
@@ -306,29 +149,6 @@ const server = serve({
     "/api/auth/logout": {
       async GET() {
         return localRedirectResponse(SITE_URL, [setCookie("gh_session", "", 0)]);
-      },
-    },
-
-    "/api/discussions/:category/:slug": {
-      async GET(req) {
-        return handleLocalDiscussionGet(req, req.params.category, req.params.slug);
-      },
-    },
-
-    "/api/discussions/:category/:slug/comments": {
-      async POST(req) {
-        return handleLocalDiscussionComment(req, req.params.category, req.params.slug);
-      },
-    },
-
-    "/api/discussions/:category/:slug/comments/:commentId/reaction": {
-      async POST(req) {
-        return handleLocalDiscussionReaction(
-          req,
-          req.params.category,
-          req.params.slug,
-          req.params.commentId,
-        );
       },
     },
 

@@ -30,29 +30,16 @@ class ReactionSummary(BaseModel):
 
 class CommentResponse(BaseModel):
     id: int
-    nodeId: str
     body: str
     createdAt: datetime
     updatedAt: datetime
-    url: str = ""
     parentId: int | None = None
     author: AuthorResponse | None
     reactions: ReactionSummary
 
 
-class DiscussionReference(BaseModel):
-    number: int
-    title: str
-    url: str = ""
-    nodeId: str
-
-
-class DiscussionResponse(DiscussionReference):
+class CommentsEnvelope(BaseModel):
     comments: list[CommentResponse]
-
-
-class DiscussionEnvelope(BaseModel):
-    discussion: DiscussionResponse | None
 
 
 class AddCommentRequest(BaseModel):
@@ -69,7 +56,6 @@ class AddCommentRequest(BaseModel):
 
 
 class AddCommentResponse(BaseModel):
-    discussion: DiscussionReference
     comment: CommentResponse
 
 

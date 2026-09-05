@@ -11,12 +11,12 @@ import {
 import { useLang } from "@/i18n/LanguageContext";
 import { useAuth } from "@/lib/AuthContext";
 import {
-  addDiscussionComment,
-  DiscussionApiError,
-  fetchDiscussion,
-  setDiscussionCommentLike,
-  type DiscussionComment,
-} from "@/lib/discussions";
+  addComment,
+  CommentsApiError,
+  fetchComments,
+  setCommentLike,
+  type ArticleComment,
+} from "@/lib/comments";
 import type { Category } from "@/lib/posts";
 
 function formatCommentDate(iso: string, lang: "zh" | "en"): string {
@@ -27,18 +27,18 @@ function formatCommentDate(iso: string, lang: "zh" | "en"): string {
   }).format(date);
 }
 
-function authorName(comment: DiscussionComment): string {
+function authorName(comment: ArticleComment): string {
   return comment.author?.name || comment.author?.login || "GitHub user";
 }
 
-function avatarFallback(comment: DiscussionComment): string {
+function avatarFallback(comment: ArticleComment): string {
   return (comment.author?.login || "GH").slice(0, 2).toUpperCase();
 }
 
 function isUnavailable(error: unknown): boolean {
   return (
-    error instanceof DiscussionApiError &&
-    (error.code === "discussions_unavailable" || error.status === 503)
+    error instanceof CommentsApiError &&
+    (error.code === "comments_unavailable" || error.status === 503)
   );
 }
 
@@ -52,11 +52,11 @@ function CommentItem({
   likedLabel,
   signInLabel,
 }: {
-  comment: DiscussionComment;
+  comment: ArticleComment;
   lang: "zh" | "en";
   isLoggedIn: boolean;
   likePending: boolean;
-  onLike: (comment: DiscussionComment) => void;
+  onLike: (comment: ArticleComment) => void;
   likeLabel: string;
   likedLabel: string;
   signInLabel: string;
@@ -136,7 +136,7 @@ export function CommentsSection({
 }) {
   const { lang, t } = useLang();
   const { user, loading: authLoading, login } = useAuth();
-  const [comments, setComments] = useState<DiscussionComment[]>([]);
+  const [comments, setComments] = useState<ArticleComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<"load" | "unavailable" | null>(null);
   const [actionError, setActionError] = useState<"generic" | null>(null);
@@ -148,8 +148,8 @@ export function CommentsSection({
     setLoading(true);
     setLoadError(null);
     try {
-      const discussion = await fetchDiscussion(category, slug);
-      setComments(discussion?.comments ?? []);
+      const loadedComments = await fetchComments(category, slug);
+      setComments(loadedComments);
     } catch (error) {
       setLoadError(isUnavailable(error) ? "unavailable" : "load");
     } finally {
@@ -174,7 +174,7 @@ export function CommentsSection({
     setSubmitting(true);
     setActionError(null);
     try {
-      const result = await addDiscussionComment(category, slug, body);
+      const result = await addComment(category, slug, body);
       setComments((previous) => [...previous, result.comment]);
       setDraft("");
     } catch (error) {
@@ -184,7 +184,7 @@ export function CommentsSection({
     }
   };
 
-  const handleLike = async (comment: DiscussionComment) => {
+  const handleLike = async (comment: ArticleComment) => {
     if (!user) {
       login();
       return;
@@ -194,7 +194,7 @@ export function CommentsSection({
     setActionError(null);
     setPendingLikes((previous) => new Set(previous).add(comment.id));
     try {
-      const result = await setDiscussionCommentLike(
+      const result = await setCommentLike(
         category,
         slug,
         comment.id,
