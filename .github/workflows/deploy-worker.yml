@@ -5,6 +5,7 @@ on:
     branches: [master]
     paths:
       - "worker/**"
+      - "src/server/**"
       - ".github/workflows/deploy-worker.yml"
   workflow_dispatch:
 

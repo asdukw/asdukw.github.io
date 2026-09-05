@@ -26,6 +26,23 @@ export interface Dict {
     next: string;
     backToCategory: string;
   };
+  comments: {
+    title: string;
+    count: string;
+    loading: string;
+    empty: string;
+    unavailable: string;
+    loadError: string;
+    retry: string;
+    signInToComment: string;
+    signInToLike: string;
+    placeholder: string;
+    submit: string;
+    submitting: string;
+    like: string;
+    liked: string;
+    actionError: string;
+  };
   footer: {
     rights: string;
   };
@@ -82,6 +99,23 @@ export const zh: Dict = {
     next: "下一篇",
     backToCategory: "返回列表",
   },
+  comments: {
+    title: "评论",
+    count: "条评论",
+    loading: "正在加载评论…",
+    empty: "还没有评论，来说点什么吧。",
+    unavailable: "评论服务暂时不可用，请稍后再试。",
+    loadError: "评论加载失败，请稍后再试。",
+    retry: "重新加载",
+    signInToComment: "登录 GitHub 后发表评论。",
+    signInToLike: "登录 GitHub 后点赞。",
+    placeholder: "写下你的评论…",
+    submit: "发表评论",
+    submitting: "发布中…",
+    like: "点赞",
+    liked: "取消点赞",
+    actionError: "操作失败，请稍后再试。",
+  },
   footer: {
     rights: "保留所有权利。",
   },
@@ -137,6 +171,23 @@ export const en: Dict = {
     previous: "Previous",
     next: "Next",
     backToCategory: "Back to list",
+  },
+  comments: {
+    title: "Comments",
+    count: "comments",
+    loading: "Loading comments…",
+    empty: "No comments yet. Start the conversation.",
+    unavailable: "The comment service is temporarily unavailable. Please try again later.",
+    loadError: "Comments could not be loaded. Please try again later.",
+    retry: "Try again",
+    signInToComment: "Sign in with GitHub to leave a comment.",
+    signInToLike: "Sign in with GitHub to like a comment.",
+    placeholder: "Write a comment…",
+    submit: "Post comment",
+    submitting: "Posting…",
+    like: "Like",
+    liked: "Unlike",
+    actionError: "That action failed. Please try again.",
   },
   footer: {
     rights: "All rights reserved.",

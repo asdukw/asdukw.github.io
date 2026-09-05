@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PostContent } from "@/components/blog/PostContent";
 import { TOC } from "@/components/blog/TOC";
+import { CommentsSection } from "@/components/blog/CommentsSection";
 import { useLang } from "@/i18n/LanguageContext";
 import {
   getPost,
@@ -134,6 +135,8 @@ export function PostDetailPage({ category }: { category: Category }) {
             </div>
           )}
 
+          <Separator className="my-6" />
+          <CommentsSection category={category} slug={post.slug} />
           <Separator className="my-6" />
           <PrevNext post={post} category={category} />
         </article>
