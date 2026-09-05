@@ -12,7 +12,8 @@
     "build": "bun scripts/build-content.ts && bun run css && bun build ./src/index.html --outdir=dist --sourcemap --target=browser --minify --define:process.env.NODE_ENV='\"production\"' --env='BUN_PUBLIC_*' && bun scripts/copy-favicon.ts && bun scripts/copy-404.ts",
     "start": "NODE_ENV=production bun src/index.ts",
     "dev:worker": "cd worker && wrangler dev",
-    "deploy:pages": "bun run build && wrangler pages deploy dist --project-name asdukw --branch master"
+    "deploy:pages": "bun run build && bun x wrangler pages deploy dist --project-name asdukw --branch master",
+    "deploy:worker": "cd worker && bun run deploy"
   },
   "dependencies": {
     "@mdx-js/mdx": "^3.1.1",
@@ -41,7 +42,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "shadcn": "^4.19.0",
-    "wrangler": "^3.114.17"
+    "wrangler": "^4.129.0"
   },
   "peerDependencies": {
     "typescript": "^7"

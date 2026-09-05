@@ -64,8 +64,11 @@ No test runner, linter, or formatter is configured. `bun x tsc --noEmit` 可做�
 
 ## CI/CD
 
-- GitHub Actions 在 push 到 `master` 时构建并部署 `dist/` 到 Cloudflare Pages（`deploy.yml`）
-- CI 用 `oven-sh/setup-bun@v2`，跑 `bun install` 然后 `bun run build`（已包含内容与 CSS 编译），再用 wrangler `pages deploy`
+- GitHub Actions 使用两个独立 workflow：`deploy.yml` 部署 Cloudflare Pages，`deploy-worker.yml` 部署 OAuth Worker；两者都在 `master` 上按相关路径变化触发，也支持手动触发
+- Pages CI 用 `oven-sh/setup-bun@v2`，跑 `bun install --frozen-lockfile` 和 `bun run build`（已包含内容与 CSS 编译），再用 wrangler `pages deploy`
+- Worker CI 在 `worker/` 下跑 `bun install --frozen-lockfile`、`bun x tsc --noEmit` 和 `bun x wrangler deploy`
 - 需要 GitHub secrets：`BUN_PUBLIC_AUTH_API_URL`、`BUN_PUBLIC_ADMIN_USER_ID`、`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`
-- 本地手动部署：`bun run deploy:pages`（先 build 再 wrangler pages deploy）
+- `CLOUDFLARE_API_TOKEN` 需要同时具备 Pages 部署权限和 Workers Script 部署权限；也可以拆成两个权限更窄的 token，分别配置到两个 workflow
+- 本地 Wrangler 可从根目录 `.env` 读取 `CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID`；`worker/package.json` 的部署脚本显式使用 `../.env`，不要把 Token 写入 `wrangler.toml`
+- 本地手动部署：`bun run deploy:pages`（先 build 再 wrangler pages deploy）或 `bun run deploy:worker`
 - 新增文章后：本地跑 `bun run build:content` 生成内容并提交

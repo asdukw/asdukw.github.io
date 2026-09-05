@@ -28,4 +28,19 @@ bun start                   # 仅启动 Bun 服务器
 
 ## 部署
 
-`dist/` 由 GitHub Actions 自动构建并部署到 Cloudflare Pages（push 到 `master` 触发）。手动部署：`bun run deploy:pages`。
+Pages 和 OAuth Worker 由两个独立的 GitHub Actions workflow 部署：
+
+- 修改 `src/`、构建脚本或根目录依赖时，`deploy.yml` 构建并部署 Cloudflare Pages
+- 修改 `worker/` 时，`deploy-worker.yml` 类型检查并部署 Cloudflare Worker
+- 两个 workflow 都支持在 GitHub Actions 页面手动触发
+
+本地手动部署：`bun run deploy:pages` 或 `bun run deploy:worker`。
+
+本地 Wrangler 配置放在根目录 `.env` 中（可参考 `.env.example`）：
+
+```dotenv
+CLOUDFLARE_API_TOKEN=your_cloudflare_api_token
+CLOUDFLARE_ACCOUNT_ID=your_cloudflare_account_id
+```
+
+API Token 只由 Wrangler 在本地读取，不会被打包到前端；`.env` 已加入 `.gitignore`，不要提交真实 Token。

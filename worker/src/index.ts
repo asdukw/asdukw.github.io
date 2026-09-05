@@ -22,7 +22,7 @@ interface GitHubUser {
 function jsonResponse(data: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json", ...headers },
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store", ...headers },
   });
 }
 
@@ -65,20 +65,31 @@ function generateState(): string {
   return Array.from(array, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-function setCookie(
-  name: string,
-  value: string,
-  maxAge: number,
-  extra: string[] = [],
-): string {
-  const parts = [
-    `${name}=${encodeURIComponent(value)}`,
-    "Path=/",
-    "SameSite=Lax",
-    `Max-Age=${maxAge}`,
-    ...extra,
-  ];
+type SameSite = "Lax" | "Strict" | "None";
+
+interface CookieOptions {
+  maxAge: number;
+  httpOnly?: boolean;
+  secure?: boolean;
+  sameSite?: SameSite;
+}
+
+function setCookie(name: string, value: string, options: CookieOptions): string {
+  const parts = [`${name}=${encodeURIComponent(value)}`, "Path=/", `Max-Age=${options.maxAge}`];
+  if (options.maxAge === 0) parts.push("Expires=Thu, 01 Jan 1970 00:00:00 GMT");
+  if (options.sameSite) parts.push(`SameSite=${options.sameSite}`);
+  if (options.httpOnly) parts.push("HttpOnly");
+  if (options.secure) parts.push("Secure");
   return parts.join("; ");
+}
+
+function redirectResponse(location: string, cookies: string[] = []): Response {
+  const headers = new Headers({
+    Location: location,
+    "Cache-Control": "no-store",
+  });
+  for (const cookie of cookies) headers.append("Set-Cookie", cookie);
+  return new Response(null, { status: 302, headers });
 }
 
 async function exchangeCodeForToken(
@@ -95,6 +106,7 @@ async function exchangeCodeForToken(
       client_id: env.GH_CLIENT_ID,
       client_secret: env.GH_CLIENT_SECRET,
       code,
+      redirect_uri: env.GH_CALLBACK_URL,
     }),
   });
   if (!res.ok) throw new Error(`Token exchange failed: ${res.status}`);
@@ -115,7 +127,6 @@ async function fetchGitHubUser(token: string): Promise<GitHubUser> {
 
 async function handleLogin(request: Request, env: Env): Promise<Response> {
   const state = generateState();
-  const origin = new URL(request.url).origin;
 
   const authorizeUrl = new URL("https://github.com/login/oauth/authorize");
   authorizeUrl.searchParams.set("client_id", env.GH_CLIENT_ID);
@@ -123,15 +134,14 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
   authorizeUrl.searchParams.set("state", state);
   authorizeUrl.searchParams.set("redirect_uri", env.GH_CALLBACK_URL);
 
-  const cookie = setCookie("gh_oauth_state", state, 600, ["HttpOnly", "Secure"]);
-
-  return new Response(null, {
-    status: 302,
-    headers: {
-      Location: authorizeUrl.toString(),
-      "Set-Cookie": cookie,
-    },
+  const cookie = setCookie("gh_oauth_state", state, {
+    maxAge: 600,
+    httpOnly: true,
+    secure: true,
+    sameSite: "Lax",
   });
+
+  return redirectResponse(authorizeUrl.toString(), [cookie]);
 }
 
 async function handleCallback(
@@ -141,7 +151,6 @@ async function handleCallback(
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  const origin = request.headers.get("Origin");
 
   if (!code || !state) {
     return new Response("Missing code or state", { status: 400 });
@@ -160,19 +169,20 @@ async function handleCallback(
       return new Response("Failed to get access token", { status: 401 });
     }
 
-    const sessionCookie = setCookie("gh_session", tokenRes.access_token, 60 * 60 * 24 * 30, [
-      "HttpOnly",
-      "Secure",
-    ]);
-    const clearStateCookie = setCookie("gh_oauth_state", "", 0);
-
-    return new Response(null, {
-      status: 302,
-      headers: {
-        Location: env.SITE_URL || "/",
-        "Set-Cookie": [sessionCookie, clearStateCookie].join(", "),
-      },
+    const sessionCookie = setCookie("gh_session", tokenRes.access_token, {
+      maxAge: 60 * 60 * 24 * 30,
+      httpOnly: true,
+      secure: true,
+      sameSite: "None",
     });
+    const clearStateCookie = setCookie("gh_oauth_state", "", {
+      maxAge: 0,
+      httpOnly: true,
+      secure: true,
+      sameSite: "Lax",
+    });
+
+    return redirectResponse(env.SITE_URL || "/", [sessionCookie, clearStateCookie]);
   } catch (err) {
     console.error("OAuth callback error:", err);
     return new Response("Authentication failed", { status: 500 });
@@ -202,15 +212,20 @@ async function handleLogout(
   request: Request,
   env: Env,
 ): Promise<Response> {
-  const clearSession = setCookie("gh_session", "", 0);
-
-  return new Response(null, {
-    status: 302,
-    headers: {
-      Location: env.SITE_URL || "/",
-      "Set-Cookie": clearSession,
-    },
+  const clearSession = setCookie("gh_session", "", {
+    maxAge: 0,
+    httpOnly: true,
+    secure: true,
+    sameSite: "None",
   });
+  const clearState = setCookie("gh_oauth_state", "", {
+    maxAge: 0,
+    httpOnly: true,
+    secure: true,
+    sameSite: "Lax",
+  });
+
+  return redirectResponse(env.SITE_URL || "/", [clearSession, clearState]);
 }
 
 export default {

@@ -3,6 +3,15 @@ name: Deploy to Cloudflare Pages
 on:
   push:
     branches: [master]
+    paths:
+      - "src/**"
+      - "scripts/**"
+      - "package.json"
+      - "bun.lock"
+      - "bunfig.toml"
+      - "postcss.config.mjs"
+      - "tsconfig.json"
+      - ".github/workflows/deploy.yml"
   workflow_dispatch:
 
 jobs:
@@ -18,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
-      - run: bun install
+      - run: bun install --frozen-lockfile
       - run: bun run build
       - name: Deploy to Cloudflare Pages
-        run: npx wrangler pages deploy dist --project-name asdukw --branch master
+        run: bun x wrangler pages deploy dist --project-name asdukw --branch master
