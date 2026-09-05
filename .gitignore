@@ -37,3 +37,10 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 worker/node_modules
 worker/.wrangler
 worker/.dev.vars
+
+# FastAPI backend
+backend/.venv
+backend/.env
+backend/*.egg-info
+backend/**/__pycache__
+backend/.pytest_cache
