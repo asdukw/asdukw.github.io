@@ -9,7 +9,10 @@ export interface GitHubUser {
 declare const process: { env: Record<string, string | undefined> };
 
 export function getAuthApiBase(): string {
-  return process.env.BUN_PUBLIC_AUTH_API_URL?.replace(/\/$/, "") ?? "";
+  const configured =
+    process.env.BUN_PUBLIC_API_URL || process.env.BUN_PUBLIC_AUTH_API_URL || "";
+  if (configured) return configured.replace(/\/$/, "");
+  return process.env.NODE_ENV === "production" ? "" : "http://localhost:8000";
 }
 
 export function getAdminUserId(): number | null {
