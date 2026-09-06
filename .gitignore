@@ -33,14 +33,13 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Finder (MacOS) folder config
 .DS_Store
 
-# Cloudflare Worker
+# Local runtime leftovers (the Worker and Python backend are no longer tracked)
 worker/node_modules
 worker/.wrangler
 worker/.dev.vars
 
-# FastAPI backend
 backend/.venv
 backend/.env
-backend/*.egg-info
 backend/**/__pycache__
 backend/.pytest_cache
+backend/.ruff_cache
