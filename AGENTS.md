@@ -2,7 +2,7 @@
 
 ## Runtime
 
-前端使用 Bun（不是 Node.js）；后端使用 Python 3.11+。前端命令使用 `bun`，后端命令在 `backend/` 目录执行。
+前端使用 Bun（不是 Node.js）和 React；动态数据直接使用 Supabase，不运行本地或线上 Python/FastAPI 后端。
 
 ## Commands
 
@@ -12,22 +12,26 @@
 - `bun run build:content` — 单独重新编译 MDX 内容（新增/修改文章后执行）
 - `bun run build:content:watch` — 监听 `src/content/`，改动自动重新编译内容
 - `bun run css` / `bun run css:watch` — 用 Tailwind v4 CLI 把 `src/index.css` 编译为 `src/styles.css`
-- `bun start` — production server（`NODE_ENV=production`；注意：只起 Bun 服务器，静态资源请用 `dist/` 部署到 GitHub Pages）
+- `bun start` — production server（`NODE_ENV=production`；静态资源可直接部署 `dist/`）
+- `bun x tsc --noEmit` — TypeScript 类型检查
+- `bun run deploy:pages` — 构建并用 Wrangler 部署 Cloudflare Pages
 
-前端没有单独的 test runner、linter 或 formatter，`bun x tsc --noEmit` 可做类型检查；后端使用 `pytest` 和 `ruff`，命令在 `backend/` 目录执行。
+项目没有单独的 test runner、linter 或 formatter。Supabase schema 和函数迁移位于 `supabase/migrations/`，在 Supabase SQL Editor 或 Supabase CLI 流程中应用。
 
 ## Architecture
 
-- `src/index.ts` — Bun HTTP server与路由定义（`"/*"` 回落到 `index.html` SPA shell）
+- `src/index.ts` — Bun 静态服务器：favicon、SPA shell 和开发 HMR；不包含业务 API 或 OAuth 密钥
 - `src/index.html` — HTML shell，加载 `frontend.tsx`
 - `src/frontend.tsx` — React 入口，挂载 `<App />`
 - `src/App.tsx` — 根组件：`BrowserRouter` 路由 + `LanguageProvider` + `TooltipProvider`
 - `src/pages/` — 每个路由页面对应一个文件（Home / PostListPage / PostDetailPage / Projects / About / NotFound）
 - `src/components/` — `layout/`（Header/Footer/Layout）、`blog/`（文章卡片/列表/TOC/正文）、`home/`、`ui/`（shadcn）、`icons/`
-- `src/i18n/` — 中英双语：`LanguageContext.tsx`（Provider + `useLang`）、`dictionaries.ts`（zh/en 文案，`Dict` 接口约束）
+- `src/i18n/` — 中英双语：`LanguageContext.tsx`（Provider + `useLang`）、`dictionaries.ts`（`Dict` 接口约束）
 - `src/components/blog/CommentsSection.tsx` — 文章评论列表、发表评论与点赞 UI
-- `src/lib/comments.ts` — 前端评论 API client 与类型
-- `backend/` — FastAPI API、SQLAlchemy 模型、Alembic migration 与历史评论导入脚本
+- `src/lib/supabase.ts` — 使用公开 Supabase URL 和 publishable key 初始化浏览器 client
+- `src/lib/auth.ts` / `src/lib/AuthContext.tsx` — Supabase Auth GitHub 登录、用户资料和管理员状态
+- `src/lib/comments.ts` — 调用 Supabase RPC 的评论 client 与类型
+- `supabase/migrations/20260906120000_initial.sql` — 表结构、Auth 用户同步、RLS 和评论/互动 RPC
 - `src/generated/content.ts` — **自动生成**，由 `scripts/build-content.ts` 产出，需要提交到 git（否则 dev 无内容）
 - `src/styles.css` — **自动生成**，由 Tailwind CLI 从 `src/index.css` 编译，需要提交到 git
 
@@ -50,16 +54,16 @@
 
 ## Gotchas
 
-- Server routes are defined inline in `src/index.ts` — no separate router file
-- Env vars prefixed `BUN_PUBLIC_` are exposed to client via `--env` flag (also configured in `bunfig.toml` `[serve.static]`)
-- Path alias `@/*` maps to `./src/*` (defined in `tsconfig.json`)
+- `src/index.ts` 只提供静态站点和 SPA fallback，所有动态功能都通过 Supabase client/RPC 完成
+- 环境变量前缀为 `BUN_PUBLIC_` 的值会通过构建参数暴露给浏览器；只能放 Supabase URL 和 publishable key，绝不能放 `service_role` 或其他 secret key
+- Path alias `@/*` maps to `./src/*`（定义在 `tsconfig.json`）
 - HMR uses `import.meta.hot.data` pattern in `frontend.tsx`
-- **Two lockfiles:** `bun.lock` is authoritative; `package-lock.json` is stale — ignore it
-- **Two `index.html` files:** root `index.html` is a stale placeholder; the real app shell is `src/index.html`
+- **Two lockfiles:** `bun.lock` 是权威文件；`package-lock.json` 已过时，忽略它
+- **Two `index.html` files:** 根目录 `index.html` 是过时占位文件；真正的 app shell 是 `src/index.html`
 - **路由用 `BrowserRouter`**（干净 URL，无 `#`）；部署到 Cloudflare Pages（`asdukw.pages.dev`），`scripts/copy-404.ts` 生成 `dist/_redirects`（`/* /index.html 200`）做 SPA fallback，深层链接/刷新按当前 pathname 渲染对应页面。**不要**生成 `dist/404.html`——Cloudflare Pages 只有在没有顶层 `404.html` 时才启用原生 SPA 渲染
-- **生产站点**：`https://asdukw.pages.dev`（Cloudflare Pages 项目 `asdukw`，direct upload）；OAuth Worker 域名 `https://github-oauth.zhouzongyuu.workers.dev`，`SITE_URL`（`worker/wrangler.toml`）需与生产站点保持一致
-- **评论区**：使用 FastAPI + Supabase Postgres；按 `category/slug` 懒创建文章索引。GitHub 只作为 OAuth 身份提供方，OAuth 不需要评论写权限
-- favicon 由 ImageMagick 从头像生成（`magick src/assets/avatar.jpg -resize 64x64 -define icon:auto-resize=16,32,48,64 src/favicon.ico`）；`scripts/copy-favicon.ts` 在构建时复制 `dist/favicon.ico` 以便裸 `/favicon.ico` 也能访问，`src/index.ts` 内有 dev 环境的路由
+- **生产站点**：`https://asdukw.pages.dev`（Cloudflare Pages 项目 `asdukw`，direct upload）；Supabase Auth 的 GitHub provider callback 使用 Supabase 项目域名，不再使用独立 OAuth Worker
+- **评论区**：使用 Supabase Auth、Postgres RLS 和 RPC；按 `category/slug` 懒创建文章索引。GitHub 只作为 Supabase Auth 身份提供方
+- favicon 由 ImageMagick 从头像生成（`magick src/assets/avatar.jpg -resize 64x64 -define icon:auto-resize=16,32,48,64 src/favicon.ico`）；`scripts/copy-favicon.ts` 在构建时复制 `dist/favicon.ico` 以便裸 `/favicon.ico` 也能访问，`src/index.ts` 内有 dev/static 路由
 - `lucide-react` v1 已移除 `Github` 等品牌图标，用 `src/components/icons/GithubIcon.tsx` 内联 SVG
 - npm/bun 安装遇到网络问题时，使用代理端口 7897：
   ```powershell
@@ -68,12 +72,9 @@
 
 ## CI/CD
 
-- GitHub Actions 使用独立 workflow：`deploy.yml` 部署 Cloudflare Pages，`backend.yml` 检查 FastAPI，`deploy-worker.yml` 仅保留旧 OAuth Worker fallback；它们都在 `master` 上按相关路径变化触发，也支持手动触发
-- Pages CI 用 `oven-sh/setup-bun@v2`，跑 `bun install --frozen-lockfile` 和 `bun run build`（已包含内容与 CSS 编译），再用 wrangler `pages deploy`
-- Worker CI 在 `worker/` 下跑 `bun install --frozen-lockfile`、`bun x tsc --noEmit` 和 `bun x wrangler deploy`
-- Backend CI 在 `backend/` 下安装 Python 依赖，执行 Ruff、pytest、import 检查和 Alembic 离线 SQL 检查
-- 需要 GitHub secrets：`BUN_PUBLIC_API_URL`、`BUN_PUBLIC_AUTH_API_URL`（旧 fallback）、`BUN_PUBLIC_ADMIN_USER_ID`、`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`
-- `CLOUDFLARE_API_TOKEN` 需要同时具备 Pages 部署权限和 Workers Script 部署权限；也可以拆成两个权限更窄的 token，分别配置到两个 workflow
-- 本地 Wrangler 可从根目录 `.env` 读取 `CLOUDFLARE_API_TOKEN` 和 `CLOUDFLARE_ACCOUNT_ID`；`worker/package.json` 的部署脚本显式使用 `../.env`，不要把 Token 写入 `wrangler.toml`
-- 本地手动部署：`bun run deploy:pages`（先 build 再 wrangler pages deploy）或 `bun run deploy:worker`
+- GitHub Actions 只有 `deploy.yml`：在 `master` 上按前端路径变化触发，也支持手动触发，负责构建并部署 Cloudflare Pages
+- Pages CI 使用 `oven-sh/setup-bun@v2`，运行 `bun install --frozen-lockfile` 和 `bun run build`，再执行 `wrangler pages deploy`
+- 需要 GitHub secrets：`BUN_PUBLIC_SUPABASE_URL`、`BUN_PUBLIC_SUPABASE_PUBLISHABLE_KEY`、`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_API_TOKEN` 只需要 Cloudflare Pages 部署权限；本地 Wrangler 可从根目录 `.env` 读取 token 和 account id，不要把 token 写入仓库配置
+- Supabase 数据库迁移不在 Pages workflow 中自动执行；修改 `supabase/migrations/` 后，需要在 Supabase SQL Editor 或已配置的 Supabase CLI 流程中应用
 - 新增文章后：本地跑 `bun run build:content` 生成内容并提交

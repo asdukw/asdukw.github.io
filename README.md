@@ -1,71 +1,76 @@
 # asdukw · 随笔与技术博客
 
-基于 Bun + React + shadcn/ui 的个人网站，中英双语，Cloudflare Pages 静态部署（`https://asdukw.pages.dev`），动态后端使用 FastAPI + Supabase Postgres。
+基于 Bun + React + shadcn/ui 的个人网站，中英双语，部署到 Cloudflare Pages（`https://asdukw.pages.dev`）。动态能力直接使用 Supabase，不需要自行维护 FastAPI、Bun API 或 OAuth Worker 服务。
 
 ## 技术栈
 
-- **Bun** — 运行时与打包器
+- **Bun** — 前端开发运行时与打包器
 - **React 19 + react-router** — 前端框架与路由（BrowserRouter，干净 URL）
 - **Tailwind CSS v4 + shadcn/ui** — 样式与 UI 组件
-- **MDX** — 文章内容（`@mdx-js/mdx` 构建时编译为静态 HTML）
-- **FastAPI + SQLAlchemy + Alembic** — 动态 API、ORM 与可审计数据库迁移
-- **Supabase Postgres** — 用户、会话、评论、点赞、收藏与阅读进度
-- **GitHub OAuth** — 仅作为登录身份提供方，OAuth access token 不落库
+- **MDX** — 文章内容（构建时编译为静态 HTML）
+- **Supabase Auth + Postgres + RLS** — GitHub 登录、用户资料、评论、点赞、收藏与阅读进度
+- **Cloudflare Pages** — 静态站点托管与发布
 
-## 常用命令
+## 本地开发
+
+```powershell
+Copy-Item .env.example .env
+# 编辑 .env，填写 BUN_PUBLIC_SUPABASE_URL 和 BUN_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+bun install
+bun dev
+```
+
+常用命令：
 
 ```bash
-bun install                 # 安装依赖
-bun dev                     # 开发服务器（HMR）
 bun run build:content       # 新增/修改文章后重新编译内容
 bun run css                 # 编译 Tailwind CSS（dev/build 会自动执行）
 bun run build               # 生产构建 → dist/
-bun start                   # 仅启动 Bun 服务器
+bun start                   # 启动 Bun 静态服务器
+bun x tsc --noEmit          # TypeScript 类型检查
 ```
 
-后端命令在 `backend/` 目录执行：
+前端只需要 Supabase 的 URL 和 publishable key。publishable key 会进入浏览器构建产物，因此数据库权限必须由 Supabase RLS 和 RPC 函数控制，不能把 `service_role` 或其他 secret key 放入这些变量。
 
-```powershell
-cd backend
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev]"
-alembic upgrade head       # 将 schema 应用到 Supabase
-uvicorn app.main:app --reload --port 8000
-```
+## Supabase 初始化
+
+1. 在 Supabase Dashboard 的 Authentication → Providers 中启用 GitHub，并把 GitHub OAuth App 的 callback URL 设置为 `https://<project-ref>.supabase.co/auth/v1/callback`。
+2. 在 Supabase 的 URL Configuration 中把 `https://asdukw.pages.dev` 和本地开发地址加入 Site URL / Redirect URLs。
+3. 在 Supabase SQL Editor 中执行 [`supabase/migrations/20260906120000_initial.sql`](supabase/migrations/20260906120000_initial.sql)。它会创建评论相关表、用户资料同步触发器、RLS 和前端调用的 RPC；使用 `if not exists`，不会主动删除已有数据。
+4. 第一次 GitHub 登录后，在 SQL Editor 中将自己的资料设为管理员：
+
+   ```sql
+   update public.users
+   set is_admin = true
+   where auth_user_id = '你的 Supabase Auth user id';
+   ```
+
+如果以后使用 Supabase CLI 管理数据库，可将同一文件纳入 CLI 的 migration 流程；当前仓库不再使用 Alembic 或 Python 数据库服务。
 
 ## 文章怎么加
 
-1. 在 `src/content/<category>/` 下新建 `<slug>.<lang>.mdx`（category ∈ `blog|tech`，lang ∈ `zh|en`）
-2. frontmatter 包含 `title`、`date`、`tags`、`excerpt`
-3. 本地跑 `bun run build:content` 生成 `src/generated/content.ts` 并提交
+1. 在 `src/content/<category>/` 下新建 `<slug>.<lang>.mdx`（category ∈ `blog|tech`，lang ∈ `zh|en`）。
+2. frontmatter 包含 `title`、`date`、`tags`、`excerpt`。
+3. 本地运行 `bun run build:content`，提交生成的 `src/generated/content.ts`。
 
 ## 部署
 
-Pages、FastAPI 检查和旧 OAuth fallback Worker 由独立的 GitHub Actions workflow 管理：
-
-- 修改 `src/`、构建脚本或根目录依赖时，`deploy.yml` 构建并部署 Cloudflare Pages
-- 修改 `backend/` 时，`backend.yml` 安装依赖并执行 Python 编译/import 检查
-- `worker/` workflow 仅保留旧 OAuth fallback；评论功能只由 FastAPI 提供，生产前端应通过 `BUN_PUBLIC_API_URL` 指向 FastAPI
-- 所有 workflow 都支持在 GitHub Actions 页面手动触发
-
-本地手动部署 Pages：`bun run deploy:pages`。FastAPI 需要部署到支持 Python 的容器或 Web 服务平台，启动命令为：
+GitHub Actions 的 [`deploy.yml`](.github/workflows/deploy.yml) 负责构建并发布 Cloudflare Pages。需要配置以下 GitHub Actions secrets：
 
 ```text
-alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+BUN_PUBLIC_SUPABASE_URL
+BUN_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+CLOUDFLARE_API_TOKEN
+CLOUDFLARE_ACCOUNT_ID
 ```
 
-部署后，将 GitHub Actions secret `BUN_PUBLIC_API_URL` 设置为 FastAPI 的公开 HTTPS 地址。FastAPI 服务需要设置 `backend/.env.example` 中的 Supabase、GitHub OAuth、CORS 和 Cookie 变量。
+本地手动部署：`bun run deploy:pages`。Cloudflare token 只由 Wrangler 读取，不会被打包进前端；本地真实值放在 `.env`，不要提交。
 
-本地 Wrangler 配置放在根目录 `.env` 中（可参考 `.env.example`）：
+数据库迁移和 GitHub Auth provider 配置属于 Supabase 项目设置，不会随 Cloudflare Pages 发布自动执行。修改 `supabase/migrations/` 后，需要在 Supabase SQL Editor 或已配置的 Supabase CLI 流程中应用并验证。
 
-```dotenv
-CLOUDFLARE_API_TOKEN=your_cloudflare_api_token
-CLOUDFLARE_ACCOUNT_ID=your_cloudflare_account_id
-```
+## 动态功能的边界
 
-API Token 只由 Wrangler 在本地读取，不会被打包到前端；`.env` 已加入 `.gitignore`，不要提交真实 Token。
-
-评论区现在由 FastAPI 写入 Supabase Postgres，接口路径为 `/api/comments/{category}/{slug}`。首次评论或收藏一篇文章时，后端会按 `category/slug` 创建文章索引。GitHub OAuth 只请求 `read:user`，登录后的会话以哈希形式存储在 `auth_sessions` 中。
-
-数据库模型在 `backend/app/models.py`，初始迁移在 `backend/alembic/versions/20260905_0001_initial.py`。修改模型后先审查 `alembic revision --autogenerate` 生成的 migration，再执行 `alembic upgrade head`。
+- GitHub 只作为 Supabase Auth 的身份提供方，浏览器通过 `@supabase/supabase-js` 完成登录和会话持久化。
+- 评论区通过 `get_comments`、`add_comment`、`set_comment_reaction` 等 Supabase RPC 访问数据库，不再请求 `/api/comments/...`。
+- 用户只能通过已授权的 RPC 写入评论、点赞、收藏和阅读进度；RLS 负责阻止浏览器直接读写受保护的表。
+- 生产站点是静态前端，仓库中不再包含 `backend/`、FastAPI、SQLAlchemy、Alembic 或 OAuth Worker。
