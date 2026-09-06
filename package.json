@@ -11,12 +11,11 @@
     "dev": "bun run css && bun --hot src/index.ts",
     "build": "bun scripts/build-content.ts && bun run css && bun build ./src/index.html --outdir=dist --sourcemap --target=browser --minify --define:process.env.NODE_ENV='\"production\"' --env='BUN_PUBLIC_*' && bun scripts/copy-favicon.ts && bun scripts/copy-404.ts",
     "start": "NODE_ENV=production bun src/index.ts",
-    "dev:worker": "cd worker && wrangler dev",
-    "deploy:pages": "bun run build && bun x wrangler pages deploy dist --project-name asdukw --branch master",
-    "deploy:worker": "cd worker && bun run deploy"
+    "deploy:pages": "bun run build && bun x wrangler pages deploy dist --project-name asdukw --branch master"
   },
   "dependencies": {
     "@mdx-js/mdx": "^3.1.1",
+    "@supabase/supabase-js": "^2.115.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/unist": "^3.0.3",
     "class-variance-authority": "^0.7.1",

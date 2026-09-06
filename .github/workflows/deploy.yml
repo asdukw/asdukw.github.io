@@ -20,9 +20,8 @@ jobs:
     permissions:
       contents: read
     env:
-      BUN_PUBLIC_API_URL: ${{ secrets.BUN_PUBLIC_API_URL }}
-      BUN_PUBLIC_AUTH_API_URL: ${{ secrets.BUN_PUBLIC_AUTH_API_URL }}
-      BUN_PUBLIC_ADMIN_USER_ID: ${{ secrets.BUN_PUBLIC_ADMIN_USER_ID }}
+      BUN_PUBLIC_SUPABASE_URL: ${{ secrets.BUN_PUBLIC_SUPABASE_URL }}
+      BUN_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.BUN_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:

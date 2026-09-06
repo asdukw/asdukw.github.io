@@ -1,5 +1,5 @@
 import type { Category } from "@/lib/posts";
-import { getAuthApiBase } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
 
 export interface CommentAuthor {
   id: string;
@@ -22,10 +22,6 @@ export interface ArticleComment {
   };
 }
 
-export interface CommentsEnvelope {
-  comments: ArticleComment[];
-}
-
 export class CommentsApiError extends Error {
   constructor(
     readonly status: number,
@@ -36,109 +32,103 @@ export class CommentsApiError extends Error {
   }
 }
 
-interface AddCommentResponse {
-  comment: ArticleComment;
+interface CommentRow {
+  id: number;
+  body: string;
+  created_at: string;
+  updated_at: string;
+  parent_id: number | null;
+  author_id: string | null;
+  author_login: string | null;
+  author_avatar_url: string | null;
+  author_name: string | null;
+  author_html_url: string | null;
+  thumbs_up: number | string;
+  viewer_has_reacted: boolean;
 }
 
-interface LikeResponse {
-  commentId: number;
+interface ReactionRow {
+  comment_id: number;
   liked: boolean;
-  thumbsUp: number;
+  thumbs_up: number | string;
 }
 
-let csrfBase: string | null = null;
-let csrfToken: string | null = null;
-
-async function getCsrfToken(base: string): Promise<string | null> {
-  if (csrfBase !== base) {
-    csrfBase = base;
-    csrfToken = null;
-  }
-  if (csrfToken) return csrfToken;
-
-  try {
-    const response = await fetch(`${base}/api/auth/csrf`, {
-      credentials: "include",
-    });
-    if (!response.ok) return null;
-    const data = (await response.json()) as { token?: unknown };
-    csrfToken = typeof data.token === "string" ? data.token : null;
-    return csrfToken;
-  } catch {
-    return null;
-  }
+function rpcError(error: { code?: string; message: string }): CommentsApiError {
+  return new CommentsApiError(400, error.code || error.message || "request_failed");
 }
 
-function commentsPath(category: Category, slug: string): string {
-  return `/api/comments/${encodeURIComponent(category)}/${encodeURIComponent(slug)}`;
-}
-
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const base = getAuthApiBase();
-  const method = (init.method ?? "GET").toUpperCase();
-  const headers = new Headers(init.headers);
-  if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
-    const token = await getCsrfToken(base);
-    if (token) headers.set("X-CSRF-Token", token);
-  }
-  const response = await fetch(`${base}${path}`, {
-    ...init,
-    headers,
-    credentials: "include",
-  });
-
-  let data: unknown = null;
-  try {
-    data = await response.json();
-  } catch {
-    // Keep the status code when the server does not return JSON.
-  }
-
-  if (!response.ok) {
-    const code =
-      typeof data === "object" && data !== null && "error" in data
-        ? String((data as { error?: unknown }).error ?? "request_failed")
-        : typeof data === "object" && data !== null && "detail" in data
-          ? String((data as { detail?: unknown }).detail ?? "request_failed")
-          : "request_failed";
-    throw new CommentsApiError(response.status, code);
-  }
-
-  return data as T;
+function mapComment(row: CommentRow): ArticleComment {
+  return {
+    id: Number(row.id),
+    body: row.body,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    parentId: row.parent_id === null ? null : Number(row.parent_id),
+    author: row.author_id && row.author_login
+      ? {
+          id: String(row.author_id),
+          login: row.author_login,
+          avatarUrl: row.author_avatar_url ?? "",
+          name: row.author_name,
+          htmlUrl: row.author_html_url ?? `https://github.com/${row.author_login}`,
+        }
+      : null,
+    reactions: {
+      thumbsUp: Number(row.thumbs_up),
+      viewerHasReacted: Boolean(row.viewer_has_reacted),
+    },
+  };
 }
 
 export async function fetchComments(
   category: Category,
   slug: string,
 ): Promise<ArticleComment[]> {
-  const data = await request<CommentsEnvelope>(commentsPath(category, slug));
-  return data.comments;
+  const { data, error } = await supabase.rpc("get_comments", {
+    p_category: category,
+    p_slug: slug,
+  });
+  if (error) throw rpcError(error);
+  return ((data ?? []) as CommentRow[]).map(mapComment);
 }
 
 export async function addComment(
   category: Category,
   slug: string,
   body: string,
-): Promise<AddCommentResponse> {
-  return request<AddCommentResponse>(`${commentsPath(category, slug)}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ body }),
+): Promise<{ comment: ArticleComment }> {
+  const { data, error } = await supabase.rpc("add_comment", {
+    p_category: category,
+    p_slug: slug,
+    p_body: body.trim(),
+    p_parent_id: null,
   });
+  if (error) throw rpcError(error);
+
+  const commentId = Number(data);
+  const comments = await fetchComments(category, slug);
+  const comment = comments.find((item) => item.id === commentId);
+  if (!comment) throw new CommentsApiError(500, "comment_not_found_after_insert");
+  return { comment };
 }
 
 export async function setCommentLike(
-  category: Category,
-  slug: string,
+  _category: Category,
+  _slug: string,
   commentId: number,
   liked: boolean,
-): Promise<LikeResponse> {
-  return request<LikeResponse>(
-    `${commentsPath(category, slug)}/${commentId}/reaction`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ liked }),
-    },
-  );
+): Promise<{ commentId: number; liked: boolean; thumbsUp: number }> {
+  const { data, error } = await supabase.rpc("set_comment_reaction", {
+    p_comment_id: commentId,
+    p_liked: liked,
+  });
+  if (error) throw rpcError(error);
+
+  const row = (Array.isArray(data) ? data[0] : data) as ReactionRow | undefined;
+  if (!row) throw new CommentsApiError(500, "reaction_not_found_after_update");
+  return {
+    commentId: Number(row.comment_id),
+    liked: Boolean(row.liked),
+    thumbsUp: Number(row.thumbs_up),
+  };
 }
