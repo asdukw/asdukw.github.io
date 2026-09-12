@@ -19,8 +19,8 @@ export const projects: Project[] = [
       en: "This very site",
     },
     description: {
-      zh: "用 Bun + React 19 + shadcn/ui 搭建的个人网站，MDX 内容流水线，中英双语，GitHub Pages 静态部署。",
-      en: "A personal site built with Bun + React 19 + shadcn/ui, an MDX content pipeline, bilingual, and statically deployed to GitHub Pages.",
+      zh: "用 Bun + React 19 + shadcn/ui 搭建的个人网站，文章存储在 Supabase，中英双语，部署到 Cloudflare Pages。",
+      en: "A personal site built with Bun + React 19 + shadcn/ui, with Supabase-backed bilingual posts deployed to Cloudflare Pages.",
     },
     tags: ["Bun", "React", "Tailwind", "TypeScript"],
     repo: "https://github.com/asdukw/asdukw.github.io",

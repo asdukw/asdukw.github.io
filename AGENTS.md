@@ -8,9 +8,7 @@
 
 - `bun install` — install dependencies
 - `bun dev` — dev server with HMR（先编译 CSS，再 `bun --hot src/index.ts`）
-- `bun run build` — 生产构建：先编译 MDX 内容 → 再编译 Tailwind CSS → 再 `bun build ./src/index.html --outdir=dist`
-- `bun run build:content` — 单独重新编译 MDX 内容（新增/修改文章后执行）
-- `bun run build:content:watch` — 监听 `src/content/`，改动自动重新编译内容
+- `bun run build` — 生产构建：编译 Tailwind CSS → 再 `bun build ./src/index.html --outdir=dist`
 - `bun run css` / `bun run css:watch` — 用 Tailwind v4 CLI 把 `src/index.css` 编译为 `src/styles.css`
 - `bun start` — production server（`NODE_ENV=production`；静态资源可直接部署 `dist/`）
 - `bun x tsc --noEmit` — TypeScript 类型检查
@@ -31,18 +29,17 @@
 - `src/lib/supabase.ts` — 使用公开 Supabase URL 和 publishable key 初始化浏览器 client
 - `src/lib/auth.ts` / `src/lib/AuthContext.tsx` — Supabase Auth GitHub 登录、用户资料和管理员状态
 - `src/lib/comments.ts` — 调用 Supabase RPC 的评论 client 与类型
-- `supabase/migrations/20260906120000_initial.sql` — 表结构、Auth 用户同步、RLS 和评论/互动 RPC
-- `src/generated/content.ts` — **自动生成**，由 `scripts/build-content.ts` 产出，需要提交到 git（否则 dev 无内容）
+- `src/lib/posts.ts` — 文章数据访问层（`getPosts` / `getPost` / `getPostTranslations`）；新的数据库查询应集中在这里，页面组件不要直接耦合 Supabase 查询细节
+- `supabase/migrations/` — 表结构、Auth 用户同步、文章内容、RLS 和评论/互动 RPC
 - `src/styles.css` — **自动生成**，由 Tailwind CLI 从 `src/index.css` 编译，需要提交到 git
 
-## Content (MDX 流水线)
+## Content (Supabase 数据库)
 
-- 文章放在 `src/content/<category>/<slug>.<lang>.mdx`
-- `category` ∈ `blog | tech`，`lang` ∈ `zh | en`
-- frontmatter：`title`、`date`（YYYY-MM-DD）、`tags`、`excerpt`
-- `scripts/build-content.ts` 用 `gray-matter` 解析、`@mdx-js/mdx` 编译、`react-dom/server` 渲染为静态 HTML，并生成 TOC、阅读时长
-- 代码高亮使用 `rehype-highlight`（hljs classes，样式在 `src/index.css` 中手写）
-- 类型与查询函数在 `src/lib/posts.ts`（`getPosts` / `getPost` / `getPostTranslations`）
+- 新文章的权威来源是 Supabase Postgres：`public.posts` 保存文章身份和发布状态，`public.post_translations` 保存中英文标题、摘要、标签、原始 MDX、渲染后的 HTML 和目录。
+- 新的文章读取和管理逻辑统一放在 `src/lib/posts.ts`，通过 `src/lib/supabase.ts` 使用 Supabase client；页面组件不要直接写 Supabase 查询。
+- 浏览器只能使用 `BUN_PUBLIC_SUPABASE_URL` 和 `BUN_PUBLIC_SUPABASE_PUBLISHABLE_KEY`。文章写入、编辑和删除必须由 RLS、管理员校验或受限 RPC 保护，绝不能把 `service_role` key 或其他 secret 暴露给浏览器。
+- 前端只读取已发布文章，并通过 RLS 查询；管理员写入使用 `upsert_post_translation` RPC。不要给浏览器授予文章表的直接写权限。
+- 文章分类仍为 `blog | tech`，语言仍为 `zh | en`；数据库 schema 应保留这两个约束，并为同一文章的多语言版本定义稳定的关联方式。
 
 ## Styling
 
@@ -77,4 +74,4 @@
 - 需要 GitHub secrets：`BUN_PUBLIC_SUPABASE_URL`、`BUN_PUBLIC_SUPABASE_PUBLISHABLE_KEY`、`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN` 只需要 Cloudflare Pages 部署权限；本地 Wrangler 可从根目录 `.env` 读取 token 和 account id，不要把 token 写入仓库配置
 - Supabase 数据库迁移不在 Pages workflow 中自动执行；修改 `supabase/migrations/` 后，需要在 Supabase SQL Editor 或已配置的 Supabase CLI 流程中应用
-- 新增文章后：本地跑 `bun run build:content` 生成内容并提交
+- 新文章以后在 Supabase 数据库中创建或编辑，不再通过新增 MDX 文件发布；涉及文章表、RLS 或 RPC 的变更必须新增 `supabase/migrations/` 文件，并先运行 `bun x supabase db push --dry-run` 再执行正式迁移

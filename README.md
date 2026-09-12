@@ -7,7 +7,7 @@
 - **Bun** — 前端开发运行时与打包器
 - **React 19 + react-router** — 前端框架与路由（BrowserRouter，干净 URL）
 - **Tailwind CSS v4 + shadcn/ui** — 样式与 UI 组件
-- **MDX** — 文章内容（构建时编译为静态 HTML）
+- **Supabase Postgres** — 文章内容和互动数据，浏览器运行时读取
 - **Supabase Auth + Postgres + RLS** — GitHub 登录、用户资料、评论、点赞、收藏与阅读进度
 - **Cloudflare Pages** — 静态站点托管与发布
 
@@ -23,7 +23,6 @@ bun dev
 常用命令：
 
 ```bash
-bun run build:content       # 新增/修改文章后重新编译内容
 bun run css                 # 编译 Tailwind CSS（dev/build 会自动执行）
 bun run build               # 生产构建 → dist/
 bun start                   # 启动 Bun 静态服务器
@@ -36,8 +35,23 @@ bun x tsc --noEmit          # TypeScript 类型检查
 
 1. 在 Supabase Dashboard 的 Authentication → Providers 中启用 GitHub，并把 GitHub OAuth App 的 callback URL 设置为 `https://<project-ref>.supabase.co/auth/v1/callback`。
 2. 在 Supabase 的 URL Configuration 中把 `https://asdukw.pages.dev` 和本地开发地址加入 Site URL / Redirect URLs。
-3. 在 Supabase SQL Editor 中执行 [`supabase/migrations/20260906120000_initial.sql`](supabase/migrations/20260906120000_initial.sql)。它会创建评论相关表、用户资料同步触发器、RLS 和前端调用的 RPC；使用 `if not exists`，不会主动删除已有数据。
-4. 第一次 GitHub 登录后，在 SQL Editor 中将自己的资料设为管理员：
+3. 登录并关联本地 Supabase 项目：
+
+   ```powershell
+   bun x supabase login
+   bun x supabase link --project-ref <project-ref>
+   ```
+
+4. 先预览、再执行仓库中的全部 migration：
+
+   ```powershell
+   bun x supabase db push --dry-run
+   bun x supabase db push
+   ```
+
+   初始 migration 创建用户、评论和互动相关表；文章 migration 会把仓库原有 MDX 的中英文内容写入 `public.posts` 和 `public.post_translations`。如果已经在 SQL Editor 手动执行过同一份 SQL，不要直接重复推送，先核对 migration history。
+
+5. 第一次 GitHub 登录后，在 SQL Editor 中将自己的资料设为管理员：
 
    ```sql
    update public.users
@@ -45,13 +59,13 @@ bun x tsc --noEmit          # TypeScript 类型检查
    where auth_user_id = '你的 Supabase Auth user id';
    ```
 
-如果以后使用 Supabase CLI 管理数据库，可将同一文件纳入 CLI 的 migration 流程；当前仓库不再使用 Alembic 或 Python 数据库服务。
+仓库使用 Supabase CLI 管理数据库 migration；当前不再使用 Alembic 或 Python 数据库服务。
 
-## 文章怎么加
+## 文章怎么管理
 
-1. 在 `src/content/<category>/` 下新建 `<slug>.<lang>.mdx`（category ∈ `blog|tech`，lang ∈ `zh|en`）。
-2. frontmatter 包含 `title`、`date`、`tags`、`excerpt`。
-3. 本地运行 `bun run build:content`，提交生成的 `src/generated/content.ts`。
+文章存储在 Supabase：`public.posts` 保存文章身份和发布状态，`public.post_translations` 保存 `zh` / `en` 两个版本的标题、摘要、标签、原始 MDX、HTML 和目录。前端公开读取已发布文章，管理员写入通过 `upsert_post_translation` RPC 完成。
+
+目前项目还没有独立的文章管理页面。新增或修改文章时，应使用受管理员权限保护的 RPC/SQL 流程，不要重新添加 `src/content/*.mdx` 文件；数据库结构变化必须新增 `supabase/migrations/` 文件。
 
 ## 部署
 
@@ -66,7 +80,7 @@ CLOUDFLARE_ACCOUNT_ID
 
 本地手动部署：`bun run deploy:pages`。Cloudflare token 只由 Wrangler 读取，不会被打包进前端；本地真实值放在 `.env`，不要提交。
 
-数据库迁移和 GitHub Auth provider 配置属于 Supabase 项目设置，不会随 Cloudflare Pages 发布自动执行。修改 `supabase/migrations/` 后，需要在 Supabase SQL Editor 或已配置的 Supabase CLI 流程中应用并验证。
+GitHub Auth provider 配置属于 Supabase 项目设置，不会随 Cloudflare Pages 发布自动执行。修改 `supabase/migrations/` 后，需要通过已关联的 Supabase CLI 流程执行并验证；Pages workflow 不会自动修改数据库。
 
 ## 动态功能的边界
 

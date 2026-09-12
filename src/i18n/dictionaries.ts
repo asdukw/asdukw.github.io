@@ -17,6 +17,9 @@ export interface Dict {
   list: {
     total: string;
     empty: string;
+    loading: string;
+    loadError: string;
+    retry: string;
   };
   post: {
     publishedOn: string;
@@ -90,6 +93,9 @@ export const zh: Dict = {
   list: {
     total: "共 {count,number,integer} 篇",
     empty: "这里还什么都没有。",
+    loading: "正在加载文章…",
+    loadError: "文章加载失败，请稍后再试。",
+    retry: "重新加载",
   },
   post: {
     publishedOn: "发布于",
@@ -163,6 +169,9 @@ export const en: Dict = {
   list: {
     total: "{count,number,integer} posts",
     empty: "Nothing here yet.",
+    loading: "Loading posts…",
+    loadError: "Posts could not be loaded. Please try again later.",
+    retry: "Try again",
   },
   post: {
     publishedOn: "Published",

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Link, useParams } from "react-router";
 import { ArrowLeft, ArrowRight, Clock } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
@@ -8,18 +9,22 @@ import { TOC } from "@/components/blog/TOC";
 import { CommentsSection } from "@/components/blog/CommentsSection";
 import { useLang } from "@/i18n/LanguageContext";
 import {
-  getPost,
-  getPostTranslations,
-  getPosts,
+  useAllPosts,
   type Category,
   type Post,
 } from "@/lib/posts";
 import { categoryPath, formatDate } from "@/lib/format";
 import { usePageTitle } from "@/hooks/usePageTitle";
 
-function PrevNext({ post, category }: { post: Post; category: Category }) {
-  const { lang } = useLang();
-  const posts = getPosts(category, lang);
+function PrevNext({
+  post,
+  category,
+  posts,
+}: {
+  post: Post;
+  category: Category;
+  posts: Post[];
+}) {
   const index = posts.findIndex((p) => p.key === post.key);
   const prev = posts[index - 1];
   const next = posts[index + 1];
@@ -63,8 +68,31 @@ function PrevNext({ post, category }: { post: Post; category: Category }) {
 export function PostDetailPage({ category }: { category: Category }) {
   const { slug } = useParams();
   const { lang, t, setLang } = useLang();
-  const post = slug ? getPost(category, slug, lang) : undefined;
+  const { posts: allPosts, loading, error, retry } = useAllPosts();
+  const posts = useMemo(
+    () =>
+      allPosts
+        .filter((item) => item.category === category && item.lang === lang)
+        .sort((a, b) => b.date.localeCompare(a.date) || a.key.localeCompare(b.key)),
+    [allPosts, category, lang],
+  );
+  const post = slug ? posts.find((item) => item.slug === slug) : undefined;
   usePageTitle(post?.title);
+
+  if (loading) {
+    return <p className="py-20 text-center text-sm text-muted-foreground">{t.list.loading}</p>;
+  }
+
+  if (error) {
+    return (
+      <div className="py-20 text-center text-sm text-muted-foreground">
+        <p>{t.list.loadError}</p>
+        <Button type="button" variant="outline" size="sm" className="mt-6" onClick={retry}>
+          {t.list.retry}
+        </Button>
+      </div>
+    );
+  }
 
   if (!post) {
     return (
@@ -78,7 +106,9 @@ export function PostDetailPage({ category }: { category: Category }) {
     );
   }
 
-  const translations = getPostTranslations(category, post.slug);
+  const translations = allPosts.filter(
+    (item) => item.category === category && item.slug === post.slug,
+  );
   const other = translations.find((p) => p.lang !== lang);
 
   return (
@@ -138,7 +168,7 @@ export function PostDetailPage({ category }: { category: Category }) {
           <Separator className="my-6" />
           <CommentsSection category={category} slug={post.slug} />
           <Separator className="my-6" />
-          <PrevNext post={post} category={category} />
+          <PrevNext post={post} category={category} posts={posts} />
         </article>
 
         <aside className="hidden lg:block">

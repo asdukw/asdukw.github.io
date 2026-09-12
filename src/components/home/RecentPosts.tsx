@@ -1,13 +1,13 @@
 import { Link } from "react-router";
 import { ArrowRight } from "lucide-react";
 import { useLang } from "@/i18n/LanguageContext";
-import { categoryInfo, getPosts, type Category } from "@/lib/posts";
+import { categoryInfo, usePosts, type Category } from "@/lib/posts";
 import { PostCard } from "@/components/blog/PostCard";
 import { categoryPath } from "@/lib/format";
 
 export function RecentPosts({ category, limit = 3 }: { category: Category; limit?: number }) {
   const { lang, t } = useLang();
-  const posts = getPosts(category, lang, limit);
+  const { posts, loading, error } = usePosts(category, lang, limit);
 
   return (
     <section className="mt-10">
@@ -24,7 +24,11 @@ export function RecentPosts({ category, limit = 3 }: { category: Category; limit
         </Link>
       </div>
 
-      {posts.length ? (
+      {loading ? (
+        <p className="text-sm text-muted-foreground">{t.list.loading}</p>
+      ) : error ? (
+        <p className="text-sm text-muted-foreground">{t.list.loadError}</p>
+      ) : posts.length ? (
         <div className="grid gap-4 sm:grid-cols-2">
           {posts.map((post) => (
             <PostCard key={post.key} post={post} />

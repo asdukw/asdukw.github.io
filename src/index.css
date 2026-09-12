@@ -90,7 +90,7 @@ body {
   color: var(--accent-foreground);
 }
 
-/* ---------- Article / MDX content ---------- */
+/* ---------- Article content ---------- */
 
 .prose-article {
   font-size: 0.95rem;
