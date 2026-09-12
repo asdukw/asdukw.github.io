@@ -12,6 +12,9 @@
 - `bun run css` / `bun run css:watch` — 用 Tailwind v4 CLI 把 `src/index.css` 编译为 `src/styles.css`
 - `bun start` — production server（`NODE_ENV=production`；静态资源可直接部署 `dist/`）
 - `bun x tsc --noEmit` — TypeScript 类型检查
+- `bun run typecheck` — TypeScript 类型检查（CI 使用）
+- `bun run format` — 使用 Biome 格式化 TypeScript/JavaScript 文件
+- `bun run lint` — 使用 Biome 检查 TypeScript/JavaScript 格式
 - `bun run deploy:pages` — 构建并用 Wrangler 部署 Cloudflare Pages
 
 项目没有单独的 test runner、linter 或 formatter。Supabase schema 和函数迁移位于 `supabase/migrations/`，在 Supabase SQL Editor 或 Supabase CLI 流程中应用。
@@ -74,4 +77,5 @@
 - 需要 GitHub secrets：`BUN_PUBLIC_SUPABASE_URL`、`BUN_PUBLIC_SUPABASE_PUBLISHABLE_KEY`、`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN` 只需要 Cloudflare Pages 部署权限；本地 Wrangler 可从根目录 `.env` 读取 token 和 account id，不要把 token 写入仓库配置
 - Supabase 数据库迁移不在 Pages workflow 中自动执行；修改 `supabase/migrations/` 后，需要在 Supabase SQL Editor 或已配置的 Supabase CLI 流程中应用
+- 数据库迁移规则：已在远程执行的迁移文件视为不可变，不要修改或删除；多个尚未执行的迁移应合并为一条迁移后再提交和执行，避免产生零散的远程迁移记录
 - 新文章以后在 Supabase 数据库中创建或编辑，不再通过新增 MDX 文件发布；涉及文章表、RLS 或 RPC 的变更必须新增 `supabase/migrations/` 文件，并先运行 `bun x supabase db push --dry-run` 再执行正式迁移
