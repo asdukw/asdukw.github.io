@@ -6,7 +6,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "format": "biome format --write src scripts",
-    "lint": "biome format --check src scripts",
+    "lint": "biome format src scripts",
     "css": "bun x @tailwindcss/cli -i ./src/index.css -o ./src/styles.css --minify",
     "css:watch": "bun x @tailwindcss/cli -i ./src/index.css -o ./src/styles.css --watch",
     "dev": "bun run css && bun --hot src/index.ts",
