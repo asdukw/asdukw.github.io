@@ -4,44 +4,46 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { site } from "@/lib/site";
 
 export function About() {
-  const { lang, t } = useLang();
-  usePageTitle(t.nav.about);
+	const { lang, t } = useLang();
+	usePageTitle(t.nav.about);
 
-  return (
-    <div className="max-w-2xl">
-      <header className="mb-6">
-        <h1 className="text-3xl font-bold tracking-tight">{t.about.introTitle}</h1>
-      </header>
+	return (
+		<div className="max-w-2xl">
+			<header className="mb-6">
+				<h1 className="text-3xl font-bold tracking-tight">
+					{t.about.introTitle}
+				</h1>
+			</header>
 
-      <p className="text-base leading-relaxed">{site.description[lang]}</p>
+			<p className="text-base leading-relaxed">{site.description[lang]}</p>
 
-      <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-        {t.about.intro1}
-        <br />
-        {t.about.intro2}
-      </p>
+			<p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+				{t.about.intro1}
+				<br />
+				{t.about.intro2}
+			</p>
 
-      <Separator className="my-8" />
+			<Separator className="my-8" />
 
-      <div>
-        <h2 className="text-base font-semibold">{t.about.contactTitle}</h2>
-        <div className="mt-3 flex flex-col gap-1.5 text-sm">
-          <a
-            href={`mailto:${site.mail}`}
-            className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-          >
-            {site.mail}
-          </a>
-          <a
-            href={site.github}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-          >
-            {site.github}
-          </a>
-        </div>
-      </div>
-    </div>
-  );
+			<div>
+				<h2 className="text-base font-semibold">{t.about.contactTitle}</h2>
+				<div className="mt-3 flex flex-col gap-1.5 text-sm">
+					<a
+						href={`mailto:${site.mail}`}
+						className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+					>
+						{site.mail}
+					</a>
+					<a
+						href={site.github}
+						target="_blank"
+						rel="noopener noreferrer"
+						className="text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+					>
+						{site.github}
+					</a>
+				</div>
+			</div>
+		</div>
+	);
 }

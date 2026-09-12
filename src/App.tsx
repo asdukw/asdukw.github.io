@@ -13,30 +13,42 @@ import { About } from "@/pages/About";
 import { NotFound } from "@/pages/NotFound";
 
 export function App() {
-  return (
-    <AuthProvider>
-      <ThemeProvider>
-        <LanguageProvider>
-          <TooltipProvider>
-            <BrowserRouter>
-              <Routes>
-                <Route element={<Layout />}>
-                  <Route index element={<Home />} />
-                  <Route path="blog" element={<PostListPage category="blog" />} />
-                  <Route path="blog/:slug" element={<PostDetailPage category="blog" />} />
-                  <Route path="tech" element={<PostListPage category="tech" />} />
-                  <Route path="tech/:slug" element={<PostDetailPage category="tech" />} />
-                  <Route path="projects" element={<Projects />} />
-                  <Route path="about" element={<About />} />
-                  <Route path="*" element={<NotFound />} />
-                </Route>
-              </Routes>
-            </BrowserRouter>
-          </TooltipProvider>
-        </LanguageProvider>
-      </ThemeProvider>
-    </AuthProvider>
-  );
+	return (
+		<AuthProvider>
+			<ThemeProvider>
+				<LanguageProvider>
+					<TooltipProvider>
+						<BrowserRouter>
+							<Routes>
+								<Route element={<Layout />}>
+									<Route index element={<Home />} />
+									<Route
+										path="blog"
+										element={<PostListPage category="blog" />}
+									/>
+									<Route
+										path="blog/:slug"
+										element={<PostDetailPage category="blog" />}
+									/>
+									<Route
+										path="tech"
+										element={<PostListPage category="tech" />}
+									/>
+									<Route
+										path="tech/:slug"
+										element={<PostDetailPage category="tech" />}
+									/>
+									<Route path="projects" element={<Projects />} />
+									<Route path="about" element={<About />} />
+									<Route path="*" element={<NotFound />} />
+								</Route>
+							</Routes>
+						</BrowserRouter>
+					</TooltipProvider>
+				</LanguageProvider>
+			</ThemeProvider>
+		</AuthProvider>
+	);
 }
 
 export default App;
