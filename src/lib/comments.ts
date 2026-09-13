@@ -19,6 +19,7 @@ export interface ArticleComment {
 		thumbsUp: number;
 		viewerHasReacted: boolean;
 	};
+	children?: ArticleComment[];
 }
 
 export class CommentsApiError extends Error {
@@ -92,11 +93,11 @@ export async function fetchComments(postId: number): Promise<ArticleComment[]> {
 	return ((data ?? []) as CommentRow[]).map(mapComment);
 }
 
-export async function addComment(postId: number, body: string): Promise<{ comment: ArticleComment }> {
+export async function addComment(postId: number, body: string, parentId: number | null = null): Promise<{ comment: ArticleComment }> {
 	const { data, error } = await supabase.rpc("add_comment_by_post_id", {
 		p_post_id: postId,
 		p_body: body.trim(),
-		p_parent_id: null,
+		p_parent_id: parentId,
 	});
 	if (error) throw rpcError(error);
 
@@ -113,14 +114,14 @@ export async function setCommentLike(
 	commentId: number,
 	liked: boolean,
 ): Promise<{ commentId: number; liked: boolean; thumbsUp: number }> {
-	const { data, error } = await supabase.rpc("set_comment_reaction", {
+	const { data, error } = await supabase.rpc("set_comment_like", {
 		p_comment_id: commentId,
 		p_liked: liked,
 	});
 	if (error) throw rpcError(error);
 
 	const row = (Array.isArray(data) ? data[0] : data) as ReactionRow | undefined;
-	if (!row) throw new CommentsApiError(500, "reaction_not_found_after_update");
+	if (!row) throw new CommentsApiError(500, "like_not_found_after_update");
 	return {
 		commentId: Number(row.comment_id),
 		liked: Boolean(row.liked),

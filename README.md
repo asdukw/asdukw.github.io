@@ -85,6 +85,6 @@ GitHub Auth provider 配置属于 Supabase 项目设置，不会随 Cloudflare P
 ## 动态功能的边界
 
 - GitHub 只作为 Supabase Auth 的身份提供方，浏览器通过 `@supabase/supabase-js` 完成登录和会话持久化。
-- 评论区通过 `get_comments`、`add_comment`、`set_comment_reaction` 等 Supabase RPC 访问数据库，不再请求 `/api/comments/...`。
+- 评论区通过 Supabase RPC 访问数据库；点赞使用 `set_comment_like`，评论支持 `parent_id` 树形回复。
 - 用户只能通过已授权的 RPC 写入评论、点赞、收藏和阅读进度；RLS 负责阻止浏览器直接读写受保护的表。
 - 生产站点是静态前端，仓库中不再包含 `backend/`、FastAPI、SQLAlchemy、Alembic 或 OAuth Worker。

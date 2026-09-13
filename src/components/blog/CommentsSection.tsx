@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { LoaderCircle, MessageCircle, Send, ThumbsUp } from "lucide-react";
+import { LoaderCircle, MessageCircle, Reply, Send, ThumbsUp } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -47,6 +47,7 @@ function CommentItem({
 	isLoggedIn,
 	likePending,
 	onLike,
+	onReply,
 	likeLabel,
 	likedLabel,
 	signInLabel,
@@ -59,6 +60,7 @@ function CommentItem({
 	likeLabel: string;
 	likedLabel: string;
 	signInLabel: string;
+	onReply: (comment: ArticleComment) => void;
 }) {
 	const liked = comment.reactions.viewerHasReacted;
 
@@ -99,6 +101,10 @@ function CommentItem({
 						{comment.body}
 					</p>
 					<div className="mt-3 flex items-center gap-1">
+						<Button type="button" variant="ghost" size="xs" className="text-muted-foreground" onClick={() => onReply(comment)}>
+							<Reply />
+							<span>{lang === "zh" ? "回复" : "Reply"}</span>
+						</Button>
 						<Tooltip>
 							<TooltipTrigger asChild>
 								<Button
@@ -147,6 +153,7 @@ export function CommentsSection({
 	);
 	const [actionError, setActionError] = useState<"generic" | null>(null);
 	const [draft, setDraft] = useState("");
+	const [replyTo, setReplyTo] = useState<ArticleComment | null>(null);
 	const [submitting, setSubmitting] = useState(false);
 	const [pendingLikes, setPendingLikes] = useState<Set<number>>(new Set());
 
@@ -180,9 +187,10 @@ export function CommentsSection({
 		setSubmitting(true);
 		setActionError(null);
 		try {
-			const result = await addComment(postId, body);
+			const result = await addComment(postId, body, replyTo?.id ?? null);
 			setComments((previous) => [...previous, result.comment]);
 			setDraft("");
+			setReplyTo(null);
     } catch {
 			setActionError("generic");
 		} finally {
@@ -224,6 +232,21 @@ export function CommentsSection({
 			});
 		}
 	};
+
+	const roots = comments.filter((comment) => comment.parentId === null);
+	const childrenByParent = new Map<number, ArticleComment[]>();
+	for (const comment of comments) {
+		if (comment.parentId === null) continue;
+		const children = childrenByParent.get(comment.parentId) ?? [];
+		children.push(comment);
+		childrenByParent.set(comment.parentId, children);
+	}
+	const renderComment = (comment: ArticleComment, depth = 0): React.ReactNode => (
+		<div key={comment.id} className={depth > 0 ? "ml-5 border-l border-border/60 pl-4 sm:ml-8" : undefined}>
+			<CommentItem comment={comment} lang={lang} isLoggedIn={Boolean(user)} likePending={pendingLikes.has(comment.id)} onLike={handleLike} onReply={setReplyTo} likeLabel={t.comments.like} likedLabel={t.comments.liked} signInLabel={t.comments.signInToLike} />
+			{(childrenByParent.get(comment.id) ?? []).map((child) => renderComment(child, depth + 1))}
+		</div>
+	);
 
 	return (
 		<section className="mt-12" aria-labelledby="comments-title">
@@ -279,19 +302,7 @@ export function CommentsSection({
 				<>
 					{comments.length > 0 ? (
 						<div className="mt-6">
-							{comments.map((comment) => (
-								<CommentItem
-									key={comment.id}
-									comment={comment}
-									lang={lang}
-									isLoggedIn={Boolean(user)}
-									likePending={pendingLikes.has(comment.id)}
-									onLike={handleLike}
-									likeLabel={t.comments.like}
-									likedLabel={t.comments.liked}
-									signInLabel={t.comments.signInToLike}
-								/>
-							))}
+							{roots.map((comment) => renderComment(comment))}
 						</div>
 					) : (
 						<p className="py-8 text-sm text-muted-foreground">
@@ -303,6 +314,7 @@ export function CommentsSection({
 						<div className="mt-6 h-24 animate-pulse rounded-md bg-muted/60" />
 					) : user ? (
 						<form onSubmit={handleSubmit} className="mt-6">
+							{replyTo && <div className="mb-2 flex items-center justify-between rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground"><span>{lang === "zh" ? `回复 ${authorName(replyTo)}` : `Replying to ${authorName(replyTo)}`}</span><button type="button" onClick={() => setReplyTo(null)} className="underline">{lang === "zh" ? "取消" : "Cancel"}</button></div>}
 							<Textarea
 								value={draft}
 								onChange={(event) => setDraft(event.target.value)}
