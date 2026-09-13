@@ -63,7 +63,7 @@ bun x tsc --noEmit          # TypeScript 类型检查
 
 ## 文章怎么管理
 
-文章存储在 Supabase：`public.posts` 保存文章身份和发布状态，`public.post_translations` 保存 `zh` / `en` 两个版本的标题、摘要、标签、原始 MDX、HTML 和目录。前端公开读取已发布文章，管理员写入通过 `upsert_post_translation` RPC 完成。
+文章存储在 Supabase：`public.posts` 保存文章身份和发布状态，`public.posts_i18n` 保存 `zh` / `en` 两个版本的标题、摘要、标签、原始 MDX、HTML 和目录。前端公开读取已发布文章，文章写入通过受限 RPC 完成。
 
 目前项目还没有独立的文章管理页面。新增或修改文章时，应使用受管理员权限保护的 RPC/SQL 流程，不要重新添加 `src/content/*.mdx` 文件；数据库结构变化必须新增 `supabase/migrations/` 文件。
 

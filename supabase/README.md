@@ -28,7 +28,7 @@ The browser uses the Supabase publishable key, so this project relies on Row Lev
    bun x supabase db push
    ```
 
-   The article migration stores the former MDX source and its rendered HTML in `public.post_translations`. If the SQL was already run manually in the Dashboard, inspect migration history before pushing it again.
+   The article migration stores the former MDX source and its rendered HTML in `public.posts_i18n`. If the SQL was already run manually in the Dashboard, inspect migration history before pushing it again.
 
 7. Set `BUN_PUBLIC_SUPABASE_URL` and `BUN_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in the local `.env` and in the Cloudflare Pages build environment.
 
