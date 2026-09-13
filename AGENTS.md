@@ -13,8 +13,7 @@
 - `bun start` — production server（`NODE_ENV=production`；静态资源可直接部署 `dist/`）
 - `bun x tsc --noEmit` — TypeScript 类型检查
 - `bun run typecheck` — TypeScript 类型检查（CI 使用）
-- `bun run format` — 使用 Biome 格式化 TypeScript/JavaScript 文件
-- `bun run lint` — 使用 Biome 检查 TypeScript/JavaScript 格式
+- `bun run lint` — 使用 ESLint 检查 TypeScript/React 代码
 - `bun run deploy:pages` — 构建并用 Wrangler 部署 Cloudflare Pages
 
 项目没有单独的 test runner、linter 或 formatter。Supabase schema 和函数迁移位于 `supabase/migrations/`，在 Supabase SQL Editor 或 Supabase CLI 流程中应用。
