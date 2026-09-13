@@ -11,6 +11,7 @@ import { PostDetailPage } from "@/pages/PostDetailPage";
 import { Projects } from "@/pages/Projects";
 import { About } from "@/pages/About";
 import { NotFound } from "@/pages/NotFound";
+import { PostEditorPage } from "@/pages/PostEditorPage";
 
 export function App() {
 	return (
@@ -40,6 +41,8 @@ export function App() {
 									/>
 									<Route path="projects" element={<Projects />} />
 									<Route path="about" element={<About />} />
+									<Route path="write/:category" element={<PostEditorPage create />} />
+									<Route path="edit/:category/:slug" element={<PostEditorPage />} />
 									<Route path="*" element={<NotFound />} />
 								</Route>
 							</Routes>

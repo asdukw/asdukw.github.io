@@ -14,6 +14,7 @@
     "deploy:pages": "bun run build && bun x wrangler pages deploy dist --project-name asdukw --branch master"
   },
   "dependencies": {
+    "@mdxeditor/editor": "^4.2.5",
     "@supabase/supabase-js": "^2.115.0",
     "@tailwindcss/postcss": "^4.3.3",
     "class-variance-authority": "^0.7.1",
