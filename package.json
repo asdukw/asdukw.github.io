@@ -19,7 +19,9 @@
     "@tailwindcss/postcss": "^4.3.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dompurify": "^3.4.15",
     "lucide-react": "^1.37.0",
+    "marked": "^18.0.13",
     "postcss": "^8.5.26",
     "radix-ui": "^1.6.7",
     "react": "^19",
@@ -32,6 +34,7 @@
     "@eslint/js": "^10.0.1",
     "@tailwindcss/cli": "^4.3.3",
     "@types/bun": "latest",
+    "@types/dompurify": "^3.2.0",
     "@types/node": "^26.4.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -41,8 +44,8 @@
     "globals": "^17.12.0",
     "shadcn": "^4.19.0",
     "supabase": "^2.116.0",
-    "typescript-eslint": "^8.70.0",
     "typescript": "5.9.3",
+    "typescript-eslint": "^8.70.0",
     "wrangler": "^4.129.0"
   }
 }

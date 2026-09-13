@@ -161,6 +161,14 @@ export function Header() {
 							{t.nav[item.key]}
 						</NavLink>
 					))}
+					{!authLoading && user && (
+						<Link to="/write" className={navClass(false)}>
+							<span className="inline-flex items-center gap-1.5">
+								<PenLine className="h-4 w-4" />
+								{t.post.edit}
+							</span>
+						</Link>
+					)}
 				</nav>
 
 				<div className="flex items-center gap-1.5">
@@ -175,15 +183,6 @@ export function Header() {
 						<Languages className="h-4 w-4" />
 						{lang === "zh" ? "EN" : "中文"}
 					</Button>
-
-					{!authLoading && user && (
-						<Button asChild variant="ghost" size="sm" className="hidden gap-1.5 md:inline-flex">
-							<Link to="/write">
-								<PenLine className="h-4 w-4" />
-								{t.post.edit}
-							</Link>
-						</Button>
-					)}
 
 					<div className="hidden md:block">
 						<UserButton />
