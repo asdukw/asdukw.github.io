@@ -7,7 +7,7 @@ import { site } from "@/lib/site";
 import avatarUrl from "@/assets/avatar.jpg";
 
 export function Hero() {
-	const { lang, t } = useLang();
+  const { t } = useLang();
 
 	return (
 		<section className="flex flex-col items-start gap-8 py-8 sm:flex-row sm:items-center sm:py-12">

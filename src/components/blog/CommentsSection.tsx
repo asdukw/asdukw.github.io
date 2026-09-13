@@ -159,7 +159,7 @@ export function CommentsSection({
 		try {
 			const loadedComments = await fetchComments(category, slug);
 			setComments(loadedComments);
-		} catch (error) {
+    } catch (error) {
 			setLoadError(isUnavailable(error) ? "unavailable" : "load");
 		} finally {
 			setLoading(false);
@@ -186,7 +186,7 @@ export function CommentsSection({
 			const result = await addComment(category, slug, body);
 			setComments((previous) => [...previous, result.comment]);
 			setDraft("");
-		} catch (error) {
+    } catch {
 			setActionError("generic");
 		} finally {
 			setSubmitting(false);
@@ -217,7 +217,7 @@ export function CommentsSection({
 						: item,
 				),
 			);
-		} catch (error) {
+		} catch {
 			setActionError("generic");
 		} finally {
 			setPendingLikes((previous) => {

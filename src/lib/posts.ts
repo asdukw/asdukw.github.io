@@ -252,10 +252,7 @@ function usePostIndex(): PostIndexState {
 
 	useEffect(() => {
 		let active = true;
-		setLoading(true);
-		setError(null);
-
-		void fetchPosts()
+    void fetchPosts()
 			.then((loadedPosts) => {
 				if (!active) return;
 				setPosts(loadedPosts);
