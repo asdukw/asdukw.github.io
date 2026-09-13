@@ -28,7 +28,6 @@ import avatarUrl from "@/assets/avatar.jpg";
 const NAV = [
 	{ to: "/", key: "home", end: true },
 	{ to: "/post", key: "posts", end: false },
-	{ to: "/projects", key: "projects", end: false },
 	{ to: "/about", key: "about", end: false },
 ] as const;
 
@@ -83,13 +82,6 @@ function UserButton() {
 					</div>
 				</DropdownMenuLabel>
 				<DropdownMenuSeparator />
-				<DropdownMenuItem asChild>
-					<Link to="/write">
-						<PenLine className="h-4 w-4" />
-						{t.post.edit}
-					</Link>
-				</DropdownMenuItem>
-				<DropdownMenuSeparator />
 				{isAdmin && (
 					<DropdownMenuItem disabled>
 						<Shield className="h-4 w-4" />
@@ -138,6 +130,7 @@ function MobileUserButton() {
 
 export function Header() {
 	const { lang, t, toggleLang } = useLang();
+	const { user, loading: authLoading } = useAuth();
 	const [open, setOpen] = useState(false);
 
 	return (
@@ -182,6 +175,15 @@ export function Header() {
 						<Languages className="h-4 w-4" />
 						{lang === "zh" ? "EN" : "中文"}
 					</Button>
+
+					{!authLoading && user && (
+						<Button asChild variant="ghost" size="sm" className="hidden gap-1.5 md:inline-flex">
+							<Link to="/write">
+								<PenLine className="h-4 w-4" />
+								{t.post.edit}
+							</Link>
+						</Button>
+					)}
 
 					<div className="hidden md:block">
 						<UserButton />
