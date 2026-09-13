@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Link, useParams } from "react-router";
-import { ArrowLeft, ArrowRight, Clock, Pencil } from "lucide-react";
+import { ArrowLeft, ArrowRight, Clock } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,6 @@ import { useLang } from "@/i18n/LanguageContext";
 import { useAllPosts, type Post } from "@/lib/posts";
 import { formatDate } from "@/lib/format";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { useAuth } from "@/lib/AuthContext";
 
 function PrevNext({
 	post,
@@ -63,7 +62,6 @@ function PrevNext({
 export function PostDetailPage() {
 	const { id } = useParams();
 	const { lang, t, setLang } = useLang();
-	const { user, isAdmin } = useAuth();
 	const { posts: allPosts, loading, error, retry } = useAllPosts();
 	const posts = useMemo(
 		() =>
@@ -119,7 +117,6 @@ export function PostDetailPage() {
 		(item) => item.id === post.id,
 	);
 	const other = translations.find((p) => p.lang !== lang);
-	const canEdit = Boolean(user && (isAdmin || post.authorAuthUserId === user.id));
 
 	return (
 		<div>
@@ -138,14 +135,6 @@ export function PostDetailPage() {
 							<h1 className="text-2xl font-bold leading-snug tracking-tight sm:text-3xl">
 								{post.title}
 							</h1>
-							{canEdit && (
-								<Button asChild variant="outline" size="sm" className="shrink-0">
-									<Link to={`/edit/${post.id}`}>
-										<Pencil className="h-4 w-4" />
-										{lang === "zh" ? "编辑" : "Edit"}
-									</Link>
-								</Button>
-							)}
 						</div>
 						<div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
 							<time dateTime={post.date}>

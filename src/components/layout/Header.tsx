@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router";
-import { Languages, LogOut, Menu, PenLine, Shield } from "lucide-react";
+import { Languages, LogOut, Menu, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
 	Sheet,
@@ -121,16 +121,12 @@ function MobileUserButton() {
 				</Avatar>
 				<span className="text-sm font-medium">{user.name || user.login}</span>
 			</div>
-			<Button asChild variant="outline" size="sm" className="w-full">
-				<Link to="/write">{t.post.edit}</Link>
-			</Button>
 		</div>
 	);
 }
 
 export function Header() {
 	const { lang, t, toggleLang } = useLang();
-	const { user, loading: authLoading } = useAuth();
 	const [open, setOpen] = useState(false);
 
 	return (
@@ -161,14 +157,6 @@ export function Header() {
 							{t.nav[item.key]}
 						</NavLink>
 					))}
-					{!authLoading && user && (
-						<Link to="/write" className={navClass(false)}>
-							<span className="inline-flex items-center gap-1.5">
-								<PenLine className="h-4 w-4" />
-								{t.post.edit}
-							</span>
-						</Link>
-					)}
 				</nav>
 
 				<div className="flex items-center gap-1.5">

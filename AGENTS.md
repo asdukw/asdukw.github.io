@@ -40,7 +40,7 @@
 - 新文章的权威来源是 Supabase Postgres：`public.posts` 保存文章身份和发布状态，`public.posts_i18n` 保存中英文标题、摘要、标签、原始 MDX、渲染后的 HTML 和目录。
 - 新的文章读取和管理逻辑统一放在 `src/lib/posts.ts`，通过 `src/lib/supabase.ts` 使用 Supabase client；页面组件不要直接写 Supabase 查询。
 - 浏览器只能使用 `BUN_PUBLIC_SUPABASE_URL` 和 `BUN_PUBLIC_SUPABASE_PUBLISHABLE_KEY`。文章写入、编辑和删除必须由 RLS、管理员校验或受限 RPC 保护，绝不能把 `service_role` key 或其他 secret 暴露给浏览器。
-- 前端只读取已发布文章，并通过 RLS 查询；文章写入使用 `save_post_translation_by_id` RPC。不要给浏览器授予文章表的直接写权限。
+- 前端只读取已发布文章，并通过 RLS 查询；项目不提供浏览器端文章写入或在线编辑功能。不要给浏览器授予文章表的直接写权限。
 - 所有内容统一为文章，不再区分 `blog` 与 `tech`，也不保存 slug/category。公开地址使用数据库生成的数字 ID：`/post/{id}`；语言仍为 `zh | en`，同一文章的多语言版本通过 `post_id` 关联。
 
 ## Styling
