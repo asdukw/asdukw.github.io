@@ -8,18 +8,16 @@ import { PostContent } from "@/components/blog/PostContent";
 import { TOC } from "@/components/blog/TOC";
 import { CommentsSection } from "@/components/blog/CommentsSection";
 import { useLang } from "@/i18n/LanguageContext";
-import { useAllPosts, type Category, type Post } from "@/lib/posts";
-import { categoryPath, formatDate } from "@/lib/format";
+import { useAllPosts, type Post } from "@/lib/posts";
+import { formatDate } from "@/lib/format";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useAuth } from "@/lib/AuthContext";
 
 function PrevNext({
 	post,
-	category,
 	posts,
 }: {
 	post: Post;
-	category: Category;
 	posts: Post[];
 }) {
 	const index = posts.findIndex((p) => p.key === post.key);
@@ -30,7 +28,7 @@ function PrevNext({
 		<div className="mt-10 grid gap-3 sm:grid-cols-2">
 			{prev ? (
 				<Link
-					to={`${categoryPath(category)}/${prev.slug}`}
+					to={`/post/${prev.id}`}
 					className="group rounded-lg border border-border/60 p-4 transition-colors hover:border-border"
 				>
 					<div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -45,7 +43,7 @@ function PrevNext({
 			)}
 			{next ? (
 				<Link
-					to={`${categoryPath(category)}/${next.slug}`}
+					to={`/post/${next.id}`}
 					className="group rounded-lg border border-border/60 p-4 text-right transition-colors hover:border-border"
 				>
 					<div className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
@@ -62,21 +60,22 @@ function PrevNext({
 	);
 }
 
-export function PostDetailPage({ category }: { category: Category }) {
-	const { slug } = useParams();
+export function PostDetailPage() {
+	const { id } = useParams();
 	const { lang, t, setLang } = useLang();
 	const { user, isAdmin } = useAuth();
 	const { posts: allPosts, loading, error, retry } = useAllPosts();
 	const posts = useMemo(
 		() =>
 			allPosts
-				.filter((item) => item.category === category && item.lang === lang)
+				.filter((item) => item.lang === lang)
 				.sort(
 					(a, b) => b.date.localeCompare(a.date) || a.key.localeCompare(b.key),
 				),
-		[allPosts, category, lang],
+		[allPosts, lang],
 	);
-	const post = slug ? posts.find((item) => item.slug === slug) : undefined;
+	const postId = Number(id);
+	const post = Number.isSafeInteger(postId) ? posts.find((item) => item.id === postId) : undefined;
 	usePageTitle(post?.title);
 
 	if (loading) {
@@ -117,7 +116,7 @@ export function PostDetailPage({ category }: { category: Category }) {
 	}
 
 	const translations = allPosts.filter(
-		(item) => item.category === category && item.slug === post.slug,
+		(item) => item.id === post.id,
 	);
 	const other = translations.find((p) => p.lang !== lang);
 	const canEdit = Boolean(user && (isAdmin || post.authorAuthUserId === user.id));
@@ -125,7 +124,7 @@ export function PostDetailPage({ category }: { category: Category }) {
 	return (
 		<div>
 			<Link
-				to={categoryPath(category)}
+				to="/post"
 				className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
 			>
 				<ArrowLeft className="h-4 w-4" />
@@ -141,7 +140,7 @@ export function PostDetailPage({ category }: { category: Category }) {
 							</h1>
 							{canEdit && (
 								<Button asChild variant="outline" size="sm" className="shrink-0">
-									<Link to={`/edit/${category}/${post.slug}`}>
+									<Link to={`/edit/${post.id}`}>
 										<Pencil className="h-4 w-4" />
 										{lang === "zh" ? "编辑" : "Edit"}
 									</Link>
@@ -189,13 +188,13 @@ export function PostDetailPage({ category }: { category: Category }) {
 					)}
 
 					<Separator className="my-6" />
-					<CommentsSection category={category} slug={post.slug} />
+					<CommentsSection postId={post.id} />
 					<Separator className="my-6" />
-					<PrevNext post={post} category={category} posts={posts} />
+					<PrevNext post={post} posts={posts} />
 				</article>
 
 				<aside className="hidden lg:block">
-					<TOC toc={post.toc} category={category} />
+					<TOC toc={post.toc} />
 				</aside>
 			</div>
 		</div>

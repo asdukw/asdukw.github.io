@@ -1,25 +1,23 @@
 import { useMemo, useState } from "react";
 import { useLang } from "@/i18n/LanguageContext";
-import { categoryInfo, usePosts, type Category } from "@/lib/posts";
+import { POST_INFO, usePosts } from "@/lib/posts";
 import { PostCard } from "./PostCard";
 
 export function PostList({
-	category,
 	showFilter = true,
 }: {
-	category: Category;
 	showFilter?: boolean;
 }) {
 	const { lang, t } = useLang();
 	const [tag, setTag] = useState<string | null>(null);
 
-	const { posts, loading, error, retry } = usePosts(category, lang);
+	const { posts, loading, error, retry } = usePosts(lang);
 	const tags = useMemo(
 		() => Array.from(new Set(posts.flatMap((p) => p.tags))).sort(),
 		[posts],
 	);
 	const filtered = tag ? posts.filter((p) => p.tags.includes(tag)) : posts;
-	const info = categoryInfo(category);
+	const info = POST_INFO;
 
 	if (loading) {
 		return (

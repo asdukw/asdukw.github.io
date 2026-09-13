@@ -40,8 +40,8 @@
 - 新文章的权威来源是 Supabase Postgres：`public.posts` 保存文章身份和发布状态，`public.post_translations` 保存中英文标题、摘要、标签、原始 MDX、渲染后的 HTML 和目录。
 - 新的文章读取和管理逻辑统一放在 `src/lib/posts.ts`，通过 `src/lib/supabase.ts` 使用 Supabase client；页面组件不要直接写 Supabase 查询。
 - 浏览器只能使用 `BUN_PUBLIC_SUPABASE_URL` 和 `BUN_PUBLIC_SUPABASE_PUBLISHABLE_KEY`。文章写入、编辑和删除必须由 RLS、管理员校验或受限 RPC 保护，绝不能把 `service_role` key 或其他 secret 暴露给浏览器。
-- 前端只读取已发布文章，并通过 RLS 查询；管理员写入使用 `upsert_post_translation` RPC。不要给浏览器授予文章表的直接写权限。
-- 文章分类仍为 `blog | tech`，语言仍为 `zh | en`；数据库 schema 应保留这两个约束，并为同一文章的多语言版本定义稳定的关联方式。
+- 前端只读取已发布文章，并通过 RLS 查询；文章写入使用 `save_post_translation_by_id` RPC。不要给浏览器授予文章表的直接写权限。
+- 所有内容统一为文章，不再区分 `blog` 与 `tech`，也不保存 slug/category。公开地址使用数据库生成的数字 ID：`/post/{id}`；语言仍为 `zh | en`，同一文章的多语言版本通过 `post_id` 关联。
 
 ## Styling
 
@@ -61,7 +61,7 @@
 - **Two `index.html` files:** 根目录 `index.html` 是过时占位文件；真正的 app shell 是 `src/index.html`
 - **路由用 `BrowserRouter`**（干净 URL，无 `#`）；部署到 Cloudflare Pages（`asdukw.pages.dev`），`scripts/copy-404.ts` 生成 `dist/_redirects`（`/* /index.html 200`）做 SPA fallback，深层链接/刷新按当前 pathname 渲染对应页面。**不要**生成 `dist/404.html`——Cloudflare Pages 只有在没有顶层 `404.html` 时才启用原生 SPA 渲染
 - **生产站点**：`https://asdukw.pages.dev`（Cloudflare Pages 项目 `asdukw`，direct upload）；Supabase Auth 的 GitHub provider callback 使用 Supabase 项目域名，不再使用独立 OAuth Worker
-- **评论区**：使用 Supabase Auth、Postgres RLS 和 RPC；按 `category/slug` 懒创建文章索引。GitHub 只作为 Supabase Auth 身份提供方
+- **评论区**：使用 Supabase Auth、Postgres RLS 和 RPC；评论通过 `post_id` 关联文章。GitHub 只作为 Supabase Auth 身份提供方
 - favicon 由 ImageMagick 从头像生成（`magick src/assets/avatar.jpg -resize 64x64 -define icon:auto-resize=16,32,48,64 src/favicon.ico`）；`scripts/copy-favicon.ts` 在构建时复制 `dist/favicon.ico` 以便裸 `/favicon.ico` 也能访问，`src/index.ts` 内有 dev/static 路由
 - `lucide-react` v1 已移除 `Github` 等品牌图标，用 `src/components/icons/GithubIcon.tsx` 内联 SVG
 - npm/bun 安装遇到网络问题时，使用代理端口 7897：

@@ -7,8 +7,7 @@ export function Home() {
 	return (
 		<div>
 			<Hero />
-			<RecentPosts category="blog" />
-			<RecentPosts category="tech" />
+			<RecentPosts />
 		</div>
 	);
 }

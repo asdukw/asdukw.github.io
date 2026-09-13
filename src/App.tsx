@@ -23,26 +23,12 @@ export function App() {
 							<Routes>
 								<Route element={<Layout />}>
 									<Route index element={<Home />} />
-									<Route
-										path="blog"
-										element={<PostListPage category="blog" />}
-									/>
-									<Route
-										path="blog/:slug"
-										element={<PostDetailPage category="blog" />}
-									/>
-									<Route
-										path="tech"
-										element={<PostListPage category="tech" />}
-									/>
-									<Route
-										path="tech/:slug"
-										element={<PostDetailPage category="tech" />}
-									/>
+									<Route path="post" element={<PostListPage />} />
+									<Route path="post/:id" element={<PostDetailPage />} />
 									<Route path="projects" element={<Projects />} />
 									<Route path="about" element={<About />} />
-									<Route path="write/:category" element={<PostEditorPage create />} />
-									<Route path="edit/:category/:slug" element={<PostEditorPage />} />
+									<Route path="write" element={<PostEditorPage create />} />
+									<Route path="edit/:id" element={<PostEditorPage />} />
 									<Route path="*" element={<NotFound />} />
 								</Route>
 							</Routes>

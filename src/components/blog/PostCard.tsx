@@ -10,11 +10,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useLang } from "@/i18n/LanguageContext";
 import type { Post } from "@/lib/posts";
-import { categoryPath, formatDate } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 
 export function PostCard({ post }: { post: Post }) {
 	const { lang, t } = useLang();
-	const to = `${categoryPath(post.category)}/${post.slug}`;
+	const to = `/post/${post.id}`;
 
 	return (
 		<Link to={to} className="group block h-full">

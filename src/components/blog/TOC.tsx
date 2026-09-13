@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useLang } from "@/i18n/LanguageContext";
-import { categoryInfo, type Category, type TocItem } from "@/lib/posts";
+import { POST_INFO, type TocItem } from "@/lib/posts";
 
-export function TOC({ toc, category }: { toc: TocItem[]; category: Category }) {
+export function TOC({ toc }: { toc: TocItem[] }) {
 	const { lang } = useLang();
 	const [activeId, setActiveId] = useState<string>(toc[0]?.id ?? "");
 
@@ -34,7 +34,7 @@ export function TOC({ toc, category }: { toc: TocItem[]; category: Category }) {
 	return (
 		<nav className="sticky top-20 max-h-[calc(100vh-6rem)] overflow-y-auto pb-8 text-sm">
 			<div className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-				{categoryInfo(category).name[lang]}
+				{POST_INFO.name[lang]}
 			</div>
 			<ul className="space-y-1">
 				{toc.map((item) => (

@@ -1,4 +1,3 @@
-import type { Category } from "@/lib/posts";
 import { supabase } from "@/lib/supabase";
 
 export interface CommentAuthor {
@@ -85,33 +84,24 @@ function mapComment(row: CommentRow): ArticleComment {
 	};
 }
 
-export async function fetchComments(
-	category: Category,
-	slug: string,
-): Promise<ArticleComment[]> {
-	const { data, error } = await supabase.rpc("get_comments", {
-		p_category: category,
-		p_slug: slug,
+export async function fetchComments(postId: number): Promise<ArticleComment[]> {
+	const { data, error } = await supabase.rpc("get_comments_by_post_id", {
+		p_post_id: postId,
 	});
 	if (error) throw rpcError(error);
 	return ((data ?? []) as CommentRow[]).map(mapComment);
 }
 
-export async function addComment(
-	category: Category,
-	slug: string,
-	body: string,
-): Promise<{ comment: ArticleComment }> {
-	const { data, error } = await supabase.rpc("add_comment", {
-		p_category: category,
-		p_slug: slug,
+export async function addComment(postId: number, body: string): Promise<{ comment: ArticleComment }> {
+	const { data, error } = await supabase.rpc("add_comment_by_post_id", {
+		p_post_id: postId,
 		p_body: body.trim(),
 		p_parent_id: null,
 	});
 	if (error) throw rpcError(error);
 
 	const commentId = Number(data);
-	const comments = await fetchComments(category, slug);
+	const comments = await fetchComments(postId);
 	const comment = comments.find((item) => item.id === commentId);
 	if (!comment)
 		throw new CommentsApiError(500, "comment_not_found_after_insert");
@@ -119,8 +109,7 @@ export async function addComment(
 }
 
 export async function setCommentLike(
-	_category: Category,
-	_slug: string,
+	_postId: number,
 	commentId: number,
 	liked: boolean,
 ): Promise<{ commentId: number; liked: boolean; thumbsUp: number }> {

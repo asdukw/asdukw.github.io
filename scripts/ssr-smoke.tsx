@@ -21,16 +21,8 @@ function routesFor(paths: string[]) {
 			createRoutesFromElements(
 				<Route element={<Layout />}>
 					<Route index element={<Home />} />
-					<Route path="blog" element={<PostListPage category="blog" />} />
-					<Route
-						path="blog/:slug"
-						element={<PostDetailPage category="blog" />}
-					/>
-					<Route path="tech" element={<PostListPage category="tech" />} />
-					<Route
-						path="tech/:slug"
-						element={<PostDetailPage category="tech" />}
-					/>
+					<Route path="post" element={<PostListPage />} />
+					<Route path="post/:id" element={<PostDetailPage />} />
 					<Route path="projects" element={<Projects />} />
 					<Route path="about" element={<About />} />
 					<Route path="*" element={<NotFound />} />
@@ -52,11 +44,8 @@ function routesFor(paths: string[]) {
 
 routesFor([
 	"/",
-	"/blog",
-	"/blog/hello-world",
-	"/tech",
-	"/tech/bun-react-setup",
-	"/tech/typescript-strict",
+	"/post",
+	"/post/1",
 	"/projects",
 	"/about",
 	"/does-not-exist",

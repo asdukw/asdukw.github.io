@@ -1,5 +1,5 @@
 export interface Dict {
-	nav: Record<"home" | "blog" | "tech" | "projects" | "about", string>;
+	nav: Record<"home" | "posts" | "projects" | "about", string>;
 	common: {
 		readMore: string;
 		all: string;
@@ -10,8 +10,6 @@ export interface Dict {
 	home: {
 		greeting: string;
 		subtitle: string;
-		recentJournal: string;
-		recentTech: string;
 		viewAll: string;
 	};
 	list: {
@@ -72,8 +70,7 @@ export interface Dict {
 export const zh: Dict = {
 	nav: {
 		home: "首页",
-		blog: "随笔",
-		tech: "技术博客",
+		posts: "文章",
 		projects: "项目",
 		about: "关于",
 	},
@@ -87,8 +84,6 @@ export const zh: Dict = {
 	home: {
 		greeting: "你好，我是",
 		subtitle: "在这里记录代码、阅读与生活的点滴。",
-		recentJournal: "最新随笔",
-		recentTech: "最新技术文章",
 		viewAll: "查看全部",
 	},
 	list: {
@@ -149,8 +144,7 @@ export const zh: Dict = {
 export const en: Dict = {
 	nav: {
 		home: "Home",
-		blog: "Journal",
-		tech: "Tech",
+		posts: "Posts",
 		projects: "Projects",
 		about: "About",
 	},
@@ -164,8 +158,6 @@ export const en: Dict = {
 	home: {
 		greeting: "Hi, I'm",
 		subtitle: "Writing down code, reading, and the small things in life.",
-		recentJournal: "Recent journal",
-		recentTech: "Recent tech posts",
 		viewAll: "View all",
 	},
 	list: {
@@ -215,7 +207,7 @@ export const en: Dict = {
 		introTitle: "About me",
 		intro1: "Hi, I'm asdukw, a software engineer.",
 		intro2:
-			"I write code by day and words by night. This site holds my notes on tech and life.",
+			"I write code by day and words by night. This site holds my notes on code and life.",
 		contactTitle: "Contact",
 	},
 	auth: {

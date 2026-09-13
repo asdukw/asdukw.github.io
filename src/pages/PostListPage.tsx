@@ -1,12 +1,12 @@
 import { Separator } from "@/components/ui/separator";
 import { PostList } from "@/components/blog/PostList";
 import { useLang } from "@/i18n/LanguageContext";
-import { categoryInfo, type Category } from "@/lib/posts";
+import { POST_INFO } from "@/lib/posts";
 import { usePageTitle } from "@/hooks/usePageTitle";
 
-export function PostListPage({ category }: { category: Category }) {
+export function PostListPage() {
 	const { lang } = useLang();
-	const info = categoryInfo(category);
+	const info = POST_INFO;
 	usePageTitle(info.name[lang]);
 
 	return (
@@ -18,7 +18,7 @@ export function PostListPage({ category }: { category: Category }) {
 				</p>
 			</header>
 			<Separator className="mb-6" />
-			<PostList category={category} />
+			<PostList />
 		</div>
 	);
 }

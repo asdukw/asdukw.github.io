@@ -27,8 +27,7 @@ import avatarUrl from "@/assets/avatar.jpg";
 
 const NAV = [
 	{ to: "/", key: "home", end: true },
-	{ to: "/blog", key: "blog", end: false },
-	{ to: "/tech", key: "tech", end: false },
+	{ to: "/post", key: "posts", end: false },
 	{ to: "/projects", key: "projects", end: false },
 	{ to: "/about", key: "about", end: false },
 ] as const;
@@ -85,15 +84,9 @@ function UserButton() {
 				</DropdownMenuLabel>
 				<DropdownMenuSeparator />
 				<DropdownMenuItem asChild>
-					<Link to="/write/blog">
+					<Link to="/write">
 						<PenLine className="h-4 w-4" />
-						{t.nav.blog} · {t.post.edit}
-					</Link>
-				</DropdownMenuItem>
-				<DropdownMenuItem asChild>
-					<Link to="/write/tech">
-						<PenLine className="h-4 w-4" />
-						{t.nav.tech} · {t.post.edit}
+						{t.post.edit}
 					</Link>
 				</DropdownMenuItem>
 				<DropdownMenuSeparator />
@@ -129,17 +122,16 @@ function MobileUserButton() {
 
 	return (
 		<div className="space-y-2">
-		<div className="flex items-center gap-3 rounded-md border border-border/60 px-3 py-2">
-			<Avatar size="sm">
-				<AvatarImage src={user.avatar_url} alt={user.login} />
-				<AvatarFallback>{user.login.slice(0, 2).toUpperCase()}</AvatarFallback>
-			</Avatar>
-			<span className="text-sm font-medium">{user.name || user.login}</span>
-		</div>
-		<div className="grid grid-cols-2 gap-2">
-			<Button asChild variant="outline" size="sm"><Link to="/write/blog">{t.nav.blog} · {t.post.edit}</Link></Button>
-			<Button asChild variant="outline" size="sm"><Link to="/write/tech">{t.nav.tech} · {t.post.edit}</Link></Button>
-		</div>
+			<div className="flex items-center gap-3 rounded-md border border-border/60 px-3 py-2">
+				<Avatar size="sm">
+					<AvatarImage src={user.avatar_url} alt={user.login} />
+					<AvatarFallback>{user.login.slice(0, 2).toUpperCase()}</AvatarFallback>
+				</Avatar>
+				<span className="text-sm font-medium">{user.name || user.login}</span>
+			</div>
+			<Button asChild variant="outline" size="sm" className="w-full">
+				<Link to="/write">{t.post.edit}</Link>
+			</Button>
 		</div>
 	);
 }

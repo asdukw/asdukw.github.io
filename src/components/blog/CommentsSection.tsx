@@ -17,7 +17,6 @@ import {
 	setCommentLike,
 	type ArticleComment,
 } from "@/lib/comments";
-import type { Category } from "@/lib/posts";
 
 function formatCommentDate(iso: string, lang: "zh" | "en"): string {
 	const date = new Date(iso);
@@ -135,11 +134,9 @@ function CommentItem({
 }
 
 export function CommentsSection({
-	category,
-	slug,
+	postId,
 }: {
-	category: Category;
-	slug: string;
+	postId: number;
 }) {
 	const { lang, t } = useLang();
 	const { user, loading: authLoading, login } = useAuth();
@@ -157,14 +154,14 @@ export function CommentsSection({
 		setLoading(true);
 		setLoadError(null);
 		try {
-			const loadedComments = await fetchComments(category, slug);
+			const loadedComments = await fetchComments(postId);
 			setComments(loadedComments);
     } catch (error) {
 			setLoadError(isUnavailable(error) ? "unavailable" : "load");
 		} finally {
 			setLoading(false);
 		}
-	}, [category, slug]);
+	}, [postId]);
 
 	useEffect(() => {
 		void loadComments();
@@ -183,7 +180,7 @@ export function CommentsSection({
 		setSubmitting(true);
 		setActionError(null);
 		try {
-			const result = await addComment(category, slug, body);
+			const result = await addComment(postId, body);
 			setComments((previous) => [...previous, result.comment]);
 			setDraft("");
     } catch {
@@ -203,7 +200,7 @@ export function CommentsSection({
 		setActionError(null);
 		setPendingLikes((previous) => new Set(previous).add(comment.id));
 		try {
-			const result = await setCommentLike(category, slug, comment.id, liked);
+			const result = await setCommentLike(postId, comment.id, liked);
 			setComments((previous) =>
 				previous.map((item) =>
 					item.id === result.commentId

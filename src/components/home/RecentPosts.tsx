@@ -1,28 +1,25 @@
 import { Link } from "react-router";
 import { ArrowRight } from "lucide-react";
 import { useLang } from "@/i18n/LanguageContext";
-import { categoryInfo, usePosts, type Category } from "@/lib/posts";
+import { POST_INFO, usePosts } from "@/lib/posts";
 import { PostCard } from "@/components/blog/PostCard";
-import { categoryPath } from "@/lib/format";
 
 export function RecentPosts({
-	category,
 	limit = 3,
 }: {
-	category: Category;
 	limit?: number;
 }) {
 	const { lang, t } = useLang();
-	const { posts, loading, error } = usePosts(category, lang, limit);
+	const { posts, loading, error } = usePosts(lang, limit);
 
 	return (
 		<section className="mt-10">
 			<div className="mb-4 flex items-center justify-between">
 				<h2 className="text-lg font-semibold tracking-tight">
-					{category === "blog" ? t.home.recentJournal : t.home.recentTech}
+					{POST_INFO.name[lang]}
 				</h2>
 				<Link
-					to={categoryPath(category)}
+					to="/post"
 					className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
 				>
 					{t.home.viewAll}
@@ -42,7 +39,7 @@ export function RecentPosts({
 				</div>
 			) : (
 				<p className="text-sm text-muted-foreground">
-					{categoryInfo(category).description[lang]}
+					{POST_INFO.description[lang]}
 				</p>
 			)}
 		</section>

@@ -7,7 +7,7 @@ import { site } from "@/lib/site";
 import avatarUrl from "@/assets/avatar.jpg";
 
 export function Hero() {
-  const { t } = useLang();
+	const { t } = useLang();
 
 	return (
 		<section className="flex flex-col items-start gap-8 py-8 sm:flex-row sm:items-center sm:py-12">
@@ -35,10 +35,7 @@ export function Hero() {
 
 				<div className="flex items-center gap-2">
 					<Button asChild size="sm">
-						<Link to="/blog">{t.nav.blog}</Link>
-					</Button>
-					<Button asChild variant="outline" size="sm">
-						<Link to="/tech">{t.nav.tech}</Link>
+						<Link to="/post">{t.nav.posts}</Link>
 					</Button>
 					<Button asChild variant="ghost" size="icon-sm" aria-label="GitHub">
 						<a href={site.github} target="_blank" rel="noopener noreferrer">

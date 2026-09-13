@@ -7,7 +7,3 @@ export function formatDate(iso: string, lang: "zh" | "en"): string {
 		day: "numeric",
 	}).format(date);
 }
-
-export function categoryPath(category: "blog" | "tech"): string {
-	return category === "blog" ? "/blog" : "/tech";
-}
