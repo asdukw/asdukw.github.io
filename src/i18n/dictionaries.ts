@@ -22,6 +22,7 @@ export interface Dict {
 		retry: string;
 	};
 	post: {
+		edit: string;
 		publishedOn: string;
 		lastUpdated: string;
 		translatedAs: string;
@@ -98,6 +99,7 @@ export const zh: Dict = {
 		retry: "重新加载",
 	},
 	post: {
+		edit: "写文章",
 		publishedOn: "发布于",
 		lastUpdated: "最后更新",
 		translatedAs: "本文还有另一个语言版本",
@@ -174,6 +176,7 @@ export const en: Dict = {
 		retry: "Try again",
 	},
 	post: {
+		edit: "Write",
 		publishedOn: "Published",
 		lastUpdated: "Updated",
 		translatedAs: "Also available in",

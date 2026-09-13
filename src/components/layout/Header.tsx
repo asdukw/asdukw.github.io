@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router";
-import { Languages, LogOut, Menu, Shield } from "lucide-react";
+import { Languages, LogOut, Menu, PenLine, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
 	Sheet,
@@ -84,6 +84,19 @@ function UserButton() {
 					</div>
 				</DropdownMenuLabel>
 				<DropdownMenuSeparator />
+				<DropdownMenuItem asChild>
+					<Link to="/write/blog">
+						<PenLine className="h-4 w-4" />
+						{t.nav.blog} · {t.post.edit}
+					</Link>
+				</DropdownMenuItem>
+				<DropdownMenuItem asChild>
+					<Link to="/write/tech">
+						<PenLine className="h-4 w-4" />
+						{t.nav.tech} · {t.post.edit}
+					</Link>
+				</DropdownMenuItem>
+				<DropdownMenuSeparator />
 				{isAdmin && (
 					<DropdownMenuItem disabled>
 						<Shield className="h-4 w-4" />
@@ -115,12 +128,18 @@ function MobileUserButton() {
 	}
 
 	return (
+		<div className="space-y-2">
 		<div className="flex items-center gap-3 rounded-md border border-border/60 px-3 py-2">
 			<Avatar size="sm">
 				<AvatarImage src={user.avatar_url} alt={user.login} />
 				<AvatarFallback>{user.login.slice(0, 2).toUpperCase()}</AvatarFallback>
 			</Avatar>
 			<span className="text-sm font-medium">{user.name || user.login}</span>
+		</div>
+		<div className="grid grid-cols-2 gap-2">
+			<Button asChild variant="outline" size="sm"><Link to="/write/blog">{t.nav.blog} · {t.post.edit}</Link></Button>
+			<Button asChild variant="outline" size="sm"><Link to="/write/tech">{t.nav.tech} · {t.post.edit}</Link></Button>
+		</div>
 		</div>
 	);
 }

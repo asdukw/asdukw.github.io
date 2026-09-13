@@ -22,6 +22,7 @@ export interface Post {
 	readingTime: number;
 	html: string;
 	toc: TocItem[];
+	authorAuthUserId: string | null;
 }
 
 export interface CategoryInfo {
@@ -63,6 +64,7 @@ interface PostRow {
 	category: unknown;
 	slug: unknown;
 	published_on: unknown;
+	users: { auth_user_id: unknown }[] | { auth_user_id: unknown } | null;
 	post_translations: PostTranslationRow[] | PostTranslationRow | null;
 }
 
@@ -123,6 +125,9 @@ function normalizePosts(rows: PostRow[]): Post[] {
 		const category = toCategory(row.category);
 		const slug = typeof row.slug === "string" ? row.slug : "";
 		const date = typeof row.published_on === "string" ? row.published_on : "";
+		const author = Array.isArray(row.users) ? row.users[0] : row.users;
+		const authorAuthUserId =
+			typeof author?.auth_user_id === "string" ? author.auth_user_id : null;
 
 		if (!category || !slug || !date) return [];
 
@@ -152,6 +157,7 @@ function normalizePosts(rows: PostRow[]): Post[] {
 						: 1,
 					html,
 					toc: toToc(translation.toc),
+					authorAuthUserId,
 				},
 			];
 		});
@@ -166,6 +172,7 @@ async function loadPosts(): Promise<Post[]> {
         category,
         slug,
         published_on,
+        users!posts_author_id_fkey (auth_user_id),
         post_translations (
           lang,
           title,
