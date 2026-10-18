@@ -12,7 +12,7 @@
     "css:watch": "bun x @tailwindcss/cli -i ./src/index.css -o ./src/styles.css --watch",
     "build:content": "bun scripts/build-content.ts",
     "dev": "bun run build:content && bun run css && bun --hot src/index.ts",
-    "build": "bun run build:content && bun run css && bun build ./src/index.html --outdir=dist --sourcemap --target=browser --minify --define:process.env.NODE_ENV='\"production\"' --env='BUN_PUBLIC_*' && bun scripts/copy-favicon.ts && bun scripts/copy-404.ts",
+    "build": "bun run build:content && bun run css && bun build ./src/index.html --outdir=dist --public-path=/ --sourcemap --target=browser --minify --define:process.env.NODE_ENV='\"production\"' --env='BUN_PUBLIC_*' && bun scripts/copy-favicon.ts && bun scripts/copy-404.ts",
     "start": "NODE_ENV=production bun src/index.ts",
     "dev:api": "wrangler dev --config worker/wrangler.toml",
     "deploy:api": "wrangler deploy --config worker/wrangler.toml",
