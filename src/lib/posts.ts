@@ -1,24 +1,54 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { POSTS, type GeneratedTocItem } from "@/generated/posts";
 
 export type Lang = "zh" | "en";
-export interface TocItem { id: string; text: string; level: number }
-export interface Post { id: number; key: string; lang: Lang; title: string; date: string; tags: string[]; excerpt: string; readingTime: number; html: string; toc: TocItem[] }
-export const POST_INFO = { name: { zh: "文章", en: "Posts" }, description: { zh: "个人思考、技术实践与生活记录", en: "Thoughts, engineering notes, and life in words" } } satisfies { name: Record<Lang, string>; description: Record<Lang, string> };
-interface TranslationRow { lang: unknown; title: unknown; excerpt: unknown; tags: unknown; reading_time: unknown; body_html: unknown; toc: unknown }
-interface PostRow { id: unknown; published_on: unknown; posts_i18n: TranslationRow[] | TranslationRow | null }
-interface PostIndexState { posts: Post[]; loading: boolean; error: Error | null; retry: () => void }
-let cachedPosts: Post[] | null = null; let pendingPosts: Promise<Post[]> | null = null;
-const toLang = (value: unknown): Lang | null => value === "zh" || value === "en" ? value : null;
-const toTags = (value: unknown): string[] => Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-function toToc(value: unknown): TocItem[] { if (!Array.isArray(value)) return []; return value.flatMap((item) => { if (!item || typeof item !== "object") return []; const r = item as Record<string, unknown>; const id = typeof r.id === "string" ? r.id : ""; const text = typeof r.text === "string" ? r.text : ""; const level = Number(r.level); return id && text && Number.isInteger(level) && level >= 1 && level <= 6 ? [{ id, text, level }] : []; }); }
-function normalizePosts(rows: PostRow[]): Post[] { return rows.flatMap((row) => { const id = Number(row.id); const date = typeof row.published_on === "string" ? row.published_on : ""; if (!Number.isSafeInteger(id) || !date) return []; const translations = Array.isArray(row.posts_i18n) ? row.posts_i18n : row.posts_i18n ? [row.posts_i18n] : []; return translations.flatMap((translation) => { const lang = toLang(translation.lang); const title = typeof translation.title === "string" ? translation.title : ""; const html = typeof translation.body_html === "string" ? translation.body_html : ""; if (!lang || !title || !html) return []; return [{ id, key: `${id}.${lang}`, lang, title, date, tags: toTags(translation.tags), excerpt: typeof translation.excerpt === "string" ? translation.excerpt : "", readingTime: Math.max(1, Number(translation.reading_time) || 1), html, toc: toToc(translation.toc) }]; }); }); }
-async function loadPosts(): Promise<Post[]> { const { data, error } = await supabase.from("posts").select("id,published_on,posts_i18n(lang,title,excerpt,tags,reading_time,body_html,toc)").eq("is_published", true).order("published_on", { ascending: false }).order("id", { ascending: false }); if (error) throw error; return normalizePosts((data ?? []) as unknown as PostRow[]); }
-async function fetchPosts(): Promise<Post[]> { if (cachedPosts) return cachedPosts; if (pendingPosts) return pendingPosts; pendingPosts = loadPosts(); try { cachedPosts = await pendingPosts; return cachedPosts; } finally { pendingPosts = null; } }
-function selectPosts(posts: Post[], lang: Lang, limit?: number): Post[] { const selected = posts.filter((post) => post.lang === lang); return limit === undefined ? selected : selected.slice(0, limit); }
-export async function getPosts(lang: Lang, limit?: number): Promise<Post[]> { return selectPosts(await fetchPosts(), lang, limit); }
-export async function getPost(id: number, lang: Lang): Promise<Post | undefined> { return (await getPosts(lang)).find((post) => post.id === id); }
-export async function getPostTranslations(id: number): Promise<Post[]> { return (await fetchPosts()).filter((post) => post.id === id); }
-function usePostIndex(): PostIndexState { const [posts, setPosts] = useState<Post[]>(() => cachedPosts ?? []); const [loading, setLoading] = useState(cachedPosts === null); const [error, setError] = useState<Error | null>(null); const [requestKey, setRequestKey] = useState(0); useEffect(() => { let active = true; void fetchPosts().then((loadedPosts) => { if (!active) return; setPosts(loadedPosts); setLoading(false); }).catch((loadError) => { if (!active) return; setError(loadError instanceof Error ? loadError : new Error("Unable to load posts")); setLoading(false); }); return () => { active = false; }; }, [requestKey]); return { posts, loading, error, retry: useCallback(() => { cachedPosts = null; pendingPosts = null; setRequestKey((key) => key + 1); }, []) }; }
-export function useAllPosts(): PostIndexState { return usePostIndex(); }
-export function usePosts(lang: Lang, limit?: number): PostIndexState { const state = usePostIndex(); const posts = useMemo(() => selectPosts(state.posts, lang, limit), [state.posts, lang, limit]); return { ...state, posts }; }
+
+export type TocItem = GeneratedTocItem;
+
+export interface Post {
+	id: number;
+	key: string;
+	lang: Lang;
+	title: string;
+	date: string;
+	tags: string[];
+	excerpt: string;
+	readingTime: number;
+	html: string;
+	toc: TocItem[];
+}
+
+export const POST_INFO = {
+	name: { zh: "文章", en: "Posts" },
+	description: {
+		zh: "个人思考、技术实践与生活记录",
+		en: "Thoughts, engineering notes, and life in words",
+	},
+} satisfies { name: Record<Lang, string>; description: Record<Lang, string> };
+
+// src/generated/posts.ts is produced by `bun run build:content`, which already sorts
+// newest first. There is no runtime fetch: the HTML is pre-rendered at build time.
+const ALL_POSTS: Post[] = POSTS.map((post) => ({
+	id: post.id,
+	key: `${post.id}.${post.lang}`,
+	lang: post.lang,
+	title: post.title,
+	date: post.date,
+	tags: post.tags,
+	excerpt: post.excerpt,
+	readingTime: post.readingTime,
+	html: post.html,
+	toc: post.toc,
+}));
+
+export function getPosts(lang: Lang, limit?: number): Post[] {
+	const selected = ALL_POSTS.filter((post) => post.lang === lang);
+	return limit === undefined ? selected : selected.slice(0, limit);
+}
+
+export function getPost(id: number, lang: Lang): Post | undefined {
+	return ALL_POSTS.find((post) => post.id === id && post.lang === lang);
+}
+
+export function getPostTranslations(id: number): Post[] {
+	return ALL_POSTS.filter((post) => post.id === id);
+}

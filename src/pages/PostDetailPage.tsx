@@ -8,7 +8,7 @@ import { PostContent } from "@/components/blog/PostContent";
 import { TOC } from "@/components/blog/TOC";
 import { CommentsSection } from "@/components/blog/CommentsSection";
 import { useLang } from "@/i18n/LanguageContext";
-import { useAllPosts, type Post } from "@/lib/posts";
+import { getPost, getPostTranslations, getPosts, type Post } from "@/lib/posts";
 import { formatDate } from "@/lib/format";
 import { usePageTitle } from "@/hooks/usePageTitle";
 
@@ -62,44 +62,10 @@ function PrevNext({
 export function PostDetailPage() {
 	const { id } = useParams();
 	const { lang, t, setLang } = useLang();
-	const { posts: allPosts, loading, error, retry } = useAllPosts();
-	const posts = useMemo(
-		() =>
-			allPosts
-				.filter((item) => item.lang === lang)
-				.sort(
-					(a, b) => b.date.localeCompare(a.date) || a.key.localeCompare(b.key),
-				),
-		[allPosts, lang],
-	);
+	const posts = useMemo(() => getPosts(lang), [lang]);
 	const postId = Number(id);
-	const post = Number.isSafeInteger(postId) ? posts.find((item) => item.id === postId) : undefined;
+	const post = Number.isSafeInteger(postId) ? getPost(postId, lang) : undefined;
 	usePageTitle(post?.title);
-
-	if (loading) {
-		return (
-			<p className="py-20 text-center text-sm text-muted-foreground">
-				{t.list.loading}
-			</p>
-		);
-	}
-
-	if (error) {
-		return (
-			<div className="py-20 text-center text-sm text-muted-foreground">
-				<p>{t.list.loadError}</p>
-				<Button
-					type="button"
-					variant="outline"
-					size="sm"
-					className="mt-6"
-					onClick={retry}
-				>
-					{t.list.retry}
-				</Button>
-			</div>
-		);
-	}
 
 	if (!post) {
 		return (
@@ -113,10 +79,7 @@ export function PostDetailPage() {
 		);
 	}
 
-	const translations = allPosts.filter(
-		(item) => item.id === post.id,
-	);
-	const other = translations.find((p) => p.lang !== lang);
+	const other = getPostTranslations(post.id).find((item) => item.lang !== lang);
 
 	return (
 		<div>

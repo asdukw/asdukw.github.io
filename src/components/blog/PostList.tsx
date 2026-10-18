@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useLang } from "@/i18n/LanguageContext";
-import { POST_INFO, usePosts } from "@/lib/posts";
+import { getPosts, POST_INFO } from "@/lib/posts";
 import { PostCard } from "./PostCard";
 
 export function PostList({
@@ -11,36 +11,13 @@ export function PostList({
 	const { lang, t } = useLang();
 	const [tag, setTag] = useState<string | null>(null);
 
-	const { posts, loading, error, retry } = usePosts(lang);
+	const posts = useMemo(() => getPosts(lang), [lang]);
 	const tags = useMemo(
 		() => Array.from(new Set(posts.flatMap((p) => p.tags))).sort(),
 		[posts],
 	);
 	const filtered = tag ? posts.filter((p) => p.tags.includes(tag)) : posts;
 	const info = POST_INFO;
-
-	if (loading) {
-		return (
-			<p className="py-16 text-center text-sm text-muted-foreground">
-				{t.list.loading}
-			</p>
-		);
-	}
-
-	if (error) {
-		return (
-			<div className="py-16 text-center text-sm text-muted-foreground">
-				<p>{t.list.loadError}</p>
-				<button
-					type="button"
-					onClick={retry}
-					className="mt-4 rounded-md border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted"
-				>
-					{t.list.retry}
-				</button>
-			</div>
-		);
-	}
 
 	return (
 		<div>

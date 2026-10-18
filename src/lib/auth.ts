@@ -1,5 +1,4 @@
-import type { User as SupabaseUser } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase";
+import { API_BASE, ApiError, apiJson, readToken, writeToken } from "@/lib/api";
 
 export interface GitHubUser {
 	id: string;
@@ -10,80 +9,51 @@ export interface GitHubUser {
 	is_admin: boolean;
 }
 
-interface UserProfile {
-	id: number;
-	login: string;
-	avatar_url: string;
-	name: string | null;
-	html_url: string;
-	is_admin: boolean;
+/**
+ * The OAuth callback returns to the site with `#token=...`, which keeps the token
+ * out of server logs and the Referer header. Move it into storage and clean the URL.
+ */
+export function consumeSessionToken(): boolean {
+	const match = /(?:^|[#&])token=([^&]+)/.exec(window.location.hash);
+	const token = match?.[1];
+	if (!token) return false;
+
+	writeToken(decodeURIComponent(token));
+	window.history.replaceState(
+		null,
+		"",
+		`${window.location.pathname}${window.location.search}`,
+	);
+	return true;
 }
 
-function metadataString(user: SupabaseUser, key: string): string | null {
-	const value = user.user_metadata?.[key];
-	return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function fallbackUser(user: SupabaseUser): GitHubUser {
-	const login =
-		metadataString(user, "user_name") ??
-		metadataString(user, "preferred_username") ??
-		metadataString(user, "name") ??
-		user.email?.split("@", 1)[0] ??
-		"GitHub user";
-	const avatarUrl = metadataString(user, "avatar_url") ?? "";
-
-	return {
-		id: user.id,
-		login,
-		avatar_url: avatarUrl,
-		name: metadataString(user, "full_name") ?? metadataString(user, "name"),
-		html_url: metadataString(user, "html_url") ?? `https://github.com/${login}`,
-		is_admin: false,
-	};
-}
-
-export async function userFromSupabaseUser(
-	user: SupabaseUser,
-): Promise<GitHubUser> {
-	await supabase.rpc("ensure_profile");
-
-	const { data: profile } = await supabase
-		.from("users")
-		.select("id, login, avatar_url, name, html_url, is_admin")
-		.eq("auth_user_id", user.id)
-		.maybeSingle<UserProfile>();
-
-	if (!profile) return fallbackUser(user);
-
-	return {
-		id: user.id,
-		login: profile.login,
-		avatar_url: profile.avatar_url,
-		name: profile.name,
-		html_url: profile.html_url,
-		is_admin: profile.is_admin,
-	};
+export function signInWithGitHub(): void {
+	if (!API_BASE) {
+		console.error("Cannot sign in: BUN_PUBLIC_API_BASE is not configured");
+		return;
+	}
+	const redirect = `${window.location.origin}${window.location.pathname}${window.location.search}`;
+	window.location.href = `${API_BASE}/api/auth/login?redirect=${encodeURIComponent(redirect)}`;
 }
 
 export async function fetchCurrentUser(): Promise<GitHubUser | null> {
-	const {
-		data: { session },
-	} = await supabase.auth.getSession();
-	return session?.user ? userFromSupabaseUser(session.user) : null;
-}
+	if (!readToken()) return null;
 
-export async function signInWithGitHub(): Promise<void> {
-	const { error } = await supabase.auth.signInWithOAuth({
-		provider: "github",
-		options: {
-			redirectTo: window.location.origin,
-		},
-	});
-	if (error) throw error;
+	try {
+		const { user } = await apiJson<{ user: GitHubUser | null }>("/api/auth/user");
+		if (!user) writeToken(null);
+		return user;
+	} catch (error) {
+		// A rejected token is worth discarding; an unreachable API is not.
+		if (error instanceof ApiError && error.status === 401) writeToken(null);
+		return null;
+	}
 }
 
 export async function signOut(): Promise<void> {
-	const { error } = await supabase.auth.signOut();
-	if (error) throw error;
+	try {
+		await apiJson("/api/auth/logout", { method: "POST" });
+	} finally {
+		writeToken(null);
+	}
 }

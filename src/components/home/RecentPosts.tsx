@@ -1,7 +1,7 @@
 import { Link } from "react-router";
 import { ArrowRight } from "lucide-react";
 import { useLang } from "@/i18n/LanguageContext";
-import { POST_INFO, usePosts } from "@/lib/posts";
+import { getPosts, POST_INFO } from "@/lib/posts";
 import { PostCard } from "@/components/blog/PostCard";
 
 export function RecentPosts({
@@ -10,7 +10,7 @@ export function RecentPosts({
 	limit?: number;
 }) {
 	const { lang, t } = useLang();
-	const { posts, loading, error } = usePosts(lang, limit);
+	const posts = getPosts(lang, limit);
 
 	return (
 		<section className="mt-10">
@@ -27,11 +27,7 @@ export function RecentPosts({
 				</Link>
 			</div>
 
-			{loading ? (
-				<p className="text-sm text-muted-foreground">{t.list.loading}</p>
-			) : error ? (
-				<p className="text-sm text-muted-foreground">{t.list.loadError}</p>
-			) : posts.length ? (
+			{posts.length ? (
 				<div className="grid gap-4 sm:grid-cols-2">
 					{posts.map((post) => (
 						<PostCard key={post.key} post={post} />

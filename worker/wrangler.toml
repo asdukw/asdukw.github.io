@@ -1,0 +1,21 @@
+name = "asdukw-api"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+# Public configuration. Secrets are set with `wrangler secret put` and never live
+# in this file:
+#
+#   bun x wrangler secret put GH_CLIENT_SECRET --config worker/wrangler.toml
+#
+# GH_CLIENT_ID is not a secret: it is sent to GitHub in the browser redirect.
+[vars]
+SITE_URL = "https://asdukw.pages.dev"
+ALLOWED_ORIGINS = "https://asdukw.pages.dev,http://localhost:3000"
+GH_CLIENT_ID = "Ov23liqTEJqdnOLnhcNv"
+ADMIN_GITHUB_LOGINS = "asdukw"
+
+# Fill in database_id from `bun x wrangler d1 create asdukw-comments`.
+[[d1_databases]]
+binding = "DB"
+database_name = "asdukw-comments"
+database_id = "e0b58e21-32d5-4dab-b619-1ae9aa5e5ba9"

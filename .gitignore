@@ -6,6 +6,9 @@ out
 dist
 *.tgz
 
+# local article previews from scripts/render-post.ts
+*.preview.html
+
 # code coverage
 coverage
 *.lcov
