@@ -34,6 +34,8 @@ jobs:
         run: bun run build:content
       - name: Check generated content is committed
         run: git diff --exit-code src/generated/posts.ts
+      - name: Check generated search index is committed
+        run: git diff --exit-code src/generated/search.ts
       - name: Fetch pinned projects
         run: bun run fetch:projects
       - name: Check generated projects are committed

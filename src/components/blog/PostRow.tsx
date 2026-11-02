@@ -7,12 +7,15 @@ import type { Post } from "@/lib/posts";
 // 用 z-10 浮在它上面。这样既保留「整行是链接」的手感，又不会出现 <a> 套 <a>。
 //
 // hideYear 用于按年份分组的列表：分组标题已经写了年份，行里再重复一遍是噪音。
+// snippet 只在搜索有命中时传入：它替换摘要，告诉读者「这行为什么被匹配到」。
 export function PostRow({
 	post,
 	hideYear = false,
+	snippet,
 }: {
 	post: Post;
 	hideYear?: boolean;
+	snippet?: string;
 }) {
 	const { t } = useLang();
 	const p = useLangPath();
@@ -38,10 +41,16 @@ export function PostRow({
 				</Link>
 			</h3>
 
-			{post.excerpt && (
-				<p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
-					{post.excerpt}
+			{snippet ? (
+				<p className="mt-1.5 line-clamp-2 border-l-2 border-brand/40 pl-2.5 text-xs leading-relaxed text-muted-foreground">
+					{snippet}
 				</p>
+			) : (
+				post.excerpt && (
+					<p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-muted-foreground">
+						{post.excerpt}
+					</p>
+				)
 			)}
 
 			{post.tags.length > 0 && (

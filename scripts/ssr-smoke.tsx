@@ -8,6 +8,8 @@ import { existsSync } from "node:fs";
 import { dictionaries } from "@/i18n/dictionaries";
 import { langOfPath, stripLang, stripZhPrefix, withLang } from "@/i18n/paths";
 import { getPost, getPosts } from "@/lib/posts";
+import { searchPosts } from "@/lib/search";
+import { tokenize } from "@/lib/tokenize";
 import { renderRoute as render } from "./render-route";
 
 let failures = 0;
@@ -102,6 +104,53 @@ for (const [actual, expected] of pathCases) {
 check(langOfPath("/en/post") === "en", "langOfPath(/en/post) is not en");
 check(langOfPath("/en") === "en", "langOfPath(/en) is not en");
 check(langOfPath("/about") === "zh", "langOfPath(/about) is not zh");
+
+// 分词是搜索的地基：中文没有空格，切成双字 bigram 才能被检索到。这三条覆盖
+// 连续中文、中英混排和纯拉丁，任何一条挂了搜索都会静默变哑。
+const tokenCases: Array<[string, string[]]> = [
+	["把课件增量下载到本地", ["课件", "增量", "下载"]],
+	["due.md 每 2 天", ["due.md", "2"]],
+	["Bun + React 19", ["bun", "react", "19"]],
+];
+for (const [input, expected] of tokenCases) {
+	const tokens = tokenize(input);
+	for (const token of expected) {
+		check(
+			tokens.includes(token),
+			`tokenize(${JSON.stringify(input)}) is missing ${JSON.stringify(token)} (got ${JSON.stringify(tokens)})`,
+		);
+	}
+}
+check(tokenize("!!!").length === 0, "tokenize(\"!!!\") produced tokens from punctuation alone");
+
+// 搜索：正文可以搜到，空查询等于不筛选，同篇文章的中英版本不会同时出现。
+const zhSearch = searchPosts("课件", "zh");
+check(zhSearch !== undefined, "searchPosts(课件) returned undefined for a non-blank query");
+check(
+	Boolean(zhSearch?.some((hit) => hit.post.id === 2)),
+	"searchPosts(课件, zh) did not find the bb-sync article",
+);
+check(
+	(zhSearch?.filter((hit) => hit.post.id === 2).length ?? 0) === 1,
+	"searchPosts(课件, zh) listed the same article more than once",
+);
+check(
+	zhSearch?.every((hit) => hit.snippet.length > 0) ?? false,
+	"search results carry no snippet",
+);
+check(searchPosts("   ", "zh") === undefined, "a blank query must mean 'no filter', not 'no results'");
+check((searchPosts("zzzzqqqq", "zh")?.length ?? 0) === 0, "a nonsense query returned results");
+
+// 英文界面、缺英文正文：回退到中文正文，且仍然只占一行。
+const enSearch = searchPosts("课件", "en");
+check(
+	enSearch?.length === 1 && enSearch[0]?.post.lang === "zh",
+	"searchPosts(课件, en) did not fall back to the zh body exactly once",
+);
+check(
+	!searchPosts("bun", "en")?.some((hit) => hit.post.lang === "zh" && hit.post.id === 1),
+	"searchPosts(bun, en) surfaced the zh version of an article that has an en body",
+);
 
 // 构建产物检查：只有跑过 `bun run build` 才有 dist。CI 里 smoke 在 build 之前
 // 跑，所以这里只做条件检查；预渲染脚本自身会对每个写出的文件做同样的断言。

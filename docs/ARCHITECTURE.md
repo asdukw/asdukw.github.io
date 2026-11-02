@@ -5,7 +5,15 @@
 `src/content/**.mdx` → `scripts/mdx.ts` → `scripts/build-content.ts` → `src/generated/posts.ts` → `src/lib/posts.ts` → 页面组件。
 
 - `scripts/mdx.ts`：gray-matter 解析 frontmatter → remark-gfm → `@mdx-js/mdx` 的 `evaluate` → rehype-slug / rehype-autolink-headings / rehype-highlight → `renderToStaticMarkup`。HTML 在构建期生成，浏览器不打包 `@mdx-js/mdx`。
-- `scripts/build-content.ts`：遍历 `src/content/` 并写出 `src/generated/posts.ts`。
+- `scripts/build-content.ts`：遍历 `src/content/` 并写出 `src/generated/posts.ts` 与 `src/generated/search.ts`。
+
+搜索是这条流水线的支线，正文只编译一次：
+
+`scripts/build-content.ts` → `scripts/search-index.ts` → `src/generated/search.ts` → `src/lib/search.ts` → `components/blog/PostList.tsx`
+
+- `scripts/search-index.ts`：按 h2/h3 把预渲染 HTML 切成段落，剥标签留纯文本；文章级那一段保留标题、摘要和标签，所以旧的「按标题/摘要/标签搜索」不会因为改成全文搜索而变差。
+- `src/lib/search.ts`：浏览器侧用 MiniSearch 建倒排（19 段，毫秒级），按界面语言过滤、按文章聚合、截命中片段。查询不联网。
+- `src/lib/tokenize.ts`：CJK 双字 bigram + 拉丁整词。索引和查询共用这一份；不要另写一份实现。
 - `src/lib/posts.ts`：文章数据访问层（`getPosts` / `getPost` / `getPostTranslations`），直接读生成数据，没有网络请求、没有 loading 状态。
 
 项目列表是另一条独立的流水线：
@@ -29,6 +37,7 @@
 - `src/content/` — 文章源文件，一篇一个 MDX，文件名 `<name>.<lang>.mdx`（写法见 [CONTENT.md](CONTENT.md)）
 - `public/` — 文章图片等不经 bundler 的静态文件，`scripts/copy-assets.ts` 原样复制到 `dist/`（`bun build` 只输出 import 进来的资源）
 - `src/generated/posts.ts` — 自动生成的核心数据文件，构建期产物
+- `src/generated/search.ts` — 自动生成的搜索段落数据（`scripts/search-index.ts`），构建期产物
 - `src/generated/projects.ts` — 自动生成的 pinned 仓库列表（`scripts/fetch-projects.ts`），构建期产物
 - `src/lib/api.ts` — 评论 API 的 base URL、bearer token 读写和 `apiJson` 封装
 - `src/lib/auth.ts` / `src/lib/AuthContext.tsx` — GitHub 登录（跳转 Worker）、会话 token 管理和管理员状态
@@ -56,6 +65,8 @@
 - 文章语言由 frontmatter 的 `lang` 决定，与界面语言无关。英文版本是可选的：`getPosts` / `getPost` 按 `id` 只留一份，优先界面语言，缺英文正文时回退 `FALLBACK_LANG`（`zh`），所以 en 界面在只有中文正文时仍正常显示中文原文（`/en/post/2` 是英文界面 + 中文正文）。`PostDetailPage` 用 `getPostTranslations` 找另一语言版本，比较基准是正文语言而非界面语言。
 
 ## 约定
+
+- **三个 generated 文件都必须提交**：`src/generated/posts.ts`、`src/generated/projects.ts`、`src/generated/search.ts`。CI 对每一个都有 `git diff --exit-code` 漂移检查，改了 MDX 却没重新跑 `bun run build:content` 会直接失败。
 
 - Path alias `@/*` → `./src/*`（定义在 `tsconfig.json`）。
 - **两个 lockfile**：`bun.lock` 是权威文件；`package-lock.json` 已过时，忽略它。

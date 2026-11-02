@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router";
 import { Search, X } from "lucide-react";
 import { useLang } from "@/i18n/LanguageContext";
 import { getPosts, POST_INFO, type Post } from "@/lib/posts";
+import { searchPosts } from "@/lib/search";
 import { PostRow } from "./PostRow";
 
 function TagChip({
@@ -45,20 +46,19 @@ export function PostList({ showFilter = true }: { showFilter?: boolean }) {
 	const requestedTag = params.get("tag");
 	const tag = requestedTag && tags.includes(requestedTag) ? requestedTag : null;
 	const query = (params.get("q") ?? "").trim();
-	const needle = query.toLowerCase();
+
+	// 空查询时 searchPosts 返回 undefined：走原来的列表，而不是给一份空结果。
+	const hits = useMemo(() => searchPosts(query, lang), [query, lang]);
+	const snippets = useMemo(
+		() => new Map((hits ?? []).map((hit) => [hit.post.id, hit.snippet])),
+		[hits],
+	);
 
 	const filtered = useMemo(() => {
-		if (!tag && !needle) return posts;
-		return posts.filter((post) => {
-			if (tag && !post.tags.includes(tag)) return false;
-			if (!needle) return true;
-			return (
-				post.title.toLowerCase().includes(needle) ||
-				post.excerpt.toLowerCase().includes(needle) ||
-				post.tags.some((item) => item.toLowerCase().includes(needle))
-			);
-		});
-	}, [posts, tag, needle]);
+		const base = hits ? hits.map((hit) => hit.post) : posts;
+		if (!tag) return base;
+		return base.filter((post) => post.tags.includes(tag));
+	}, [posts, hits, tag]);
 
 	// 文章按日期倒序，所以同一年的会挨在一起，Map 保留插入顺序即可。
 	const groups = useMemo(() => {
@@ -163,7 +163,12 @@ export function PostList({ showFilter = true }: { showFilter?: boolean }) {
 							</h2>
 							<div>
 								{items.map((post) => (
-									<PostRow key={post.key} post={post} hideYear />
+									<PostRow
+										key={post.key}
+										post={post}
+										hideYear
+										snippet={snippets.get(post.id)}
+									/>
 								))}
 							</div>
 						</section>
