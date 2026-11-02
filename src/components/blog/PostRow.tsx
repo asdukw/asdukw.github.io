@@ -5,14 +5,22 @@ import type { Post } from "@/lib/posts";
 
 // 列表里的一行。整行都可点：标题链接上铺一层 after 伪元素盖住这一行，标签链接
 // 用 z-10 浮在它上面。这样既保留「整行是链接」的手感，又不会出现 <a> 套 <a>。
-export function PostRow({ post }: { post: Post }) {
+//
+// hideYear 用于按年份分组的列表：分组标题已经写了年份，行里再重复一遍是噪音。
+export function PostRow({
+	post,
+	hideYear = false,
+}: {
+	post: Post;
+	hideYear?: boolean;
+}) {
 	const { t } = useLang();
 
 	return (
 		<article className="group relative border-b border-border/60 py-5 transition-colors first:pt-0 last:border-b-0 hover:border-border">
 			<div className="flex items-center gap-2 text-xs text-muted-foreground">
 				<time dateTime={post.date} className="tabular-nums">
-					{post.date}
+					{hideYear ? post.date.slice(5) : post.date}
 				</time>
 				<span aria-hidden>·</span>
 				<span>

@@ -18,6 +18,9 @@ export interface Dict {
 	list: {
 		total: string;
 		empty: string;
+		noResults: string;
+		search: string;
+		clear: string;
 		loading: string;
 		loadError: string;
 		retry: string;
@@ -94,6 +97,9 @@ export const zh: Dict = {
 	list: {
 		total: "共 {count,number,integer} 篇",
 		empty: "这里还什么都没有。",
+		noResults: "没有匹配的文章。",
+		search: "搜索标题、摘要或标签…",
+		clear: "清空搜索",
 		loading: "正在加载文章…",
 		loadError: "文章加载失败，请稍后再试。",
 		retry: "重新加载",
@@ -170,6 +176,9 @@ export const en: Dict = {
 	list: {
 		total: "{count,number,integer} posts",
 		empty: "Nothing here yet.",
+		noResults: "No posts match.",
+		search: "Search titles, summaries or tags…",
+		clear: "Clear search",
 		loading: "Loading posts…",
 		loadError: "Posts could not be loaded. Please try again later.",
 		retry: "Try again",
