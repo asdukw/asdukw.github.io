@@ -13,8 +13,9 @@
       property="og:description"
       content="随笔与技术博客，记录代码、阅读与生活。"
     />
-    <meta property="og:type" content="website" />
-<link rel="icon" type="image/x-icon" href="./favicon.ico" />
+    <meta name="og:type" content="website" />
+    <meta name="theme-color" content="#ffffff" />
+    <link rel="icon" type="image/x-icon" href="./favicon.ico" />
     <title>asdukw · 随笔与技术博客</title>
     <script>
       (function () {
@@ -25,6 +26,8 @@
             (t !== "light" &&
               window.matchMedia("(prefers-color-scheme: dark)").matches);
           if (dark) document.documentElement.classList.add("dark");
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute("content", dark ? "#0a0a0a" : "#ffffff");
         } catch (e) {}
       })();
     </script>

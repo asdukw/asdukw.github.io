@@ -13,6 +13,11 @@ export type ResolvedTheme = "light" | "dark";
 
 const STORAGE_KEY = "site.theme";
 const DARK_QUERY = "(prefers-color-scheme: dark)";
+// 移动端地址栏配色，和 --background 的 light/dark 值保持一致。
+const THEME_COLOR: Record<ResolvedTheme, string> = {
+	light: "#ffffff",
+	dark: "#0a0a0a",
+};
 
 function readStoredMode(): ThemeMode {
 	try {
@@ -58,6 +63,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 		const root = document.documentElement;
 		root.classList.toggle("dark", resolved === "dark");
 		root.style.colorScheme = resolved;
+		document
+			.querySelector('meta[name="theme-color"]')
+			?.setAttribute("content", THEME_COLOR[resolved]);
 	}, [resolved]);
 
 	const setMode = useCallback((next: ThemeMode) => {
