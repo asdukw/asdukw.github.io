@@ -139,6 +139,16 @@ bb-sync 2.2.0 — doctor
    bb-sync run
    ```
 
+   跑起来大概是这样：先启动后台浏览器、登录、列出课程，再打印一份「同步计划」——哪个课程代码会落到哪个文件夹，动手前就能核对：
+
+   ![bb-sync run 登录后打印的同步计划](/images/bb-sync-run-plan.png)
+
+   跑完是汇总（这轮新下载了什么、跳过了多少已存在的文件）和逐条待办明细，逾期的是红色，测验 / 考试带类型标签：
+
+   ![bb-sync run 的汇总、新下载明细与待办明细](/images/bb-sync-run-summary.png)
+
+   这两张是我自己账号的真实输出（课程代码和路径就是本机实际样子）。
+
 默认下载到 `~/courses`（Windows 是 `C:\Users\<你>\courses`）。想换个地方：
 
 ```bash
