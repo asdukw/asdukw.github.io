@@ -21,6 +21,67 @@ export interface GeneratedPost {
 
 export const POSTS: GeneratedPost[] = [
 	{
+		"id": 2,
+		"lang": "zh",
+		"title": "bb-sync：一键把 Blackboard 搬回本地",
+		"date": "2026-11-02",
+		"tags": [
+			"港中深",
+			"Blackboard",
+			"工具"
+		],
+		"excerpt": "给港中深同学的小工具：登录 Blackboard，把课件、作业、公告增量下载到本地，并把全部课程的截止日期汇总成一份可勾选的待办清单。",
+		"readingTime": 3,
+		"html": "<h2 id=\"这是什么\"><a href=\"#这是什么\">这是什么</a></h2>\n<p><a href=\"https://github.com/asdukw/cuhk-shenzhen-blackboard-sync\">bb-sync</a> 是我写的命令行小工具，只服务港中深：</p>\n<blockquote>\n<p>登录 <code>bb.cuhk.edu.cn</code>，把课件、作业、指导（tutorial / lab）<strong>增量下载</strong>到本地，把公告存成 Markdown，再把全部课程的待办汇总成一份 <code>due.md</code>。</p>\n</blockquote>\n<p>一次同步之后，你的学期大概长这样：</p>\n<pre><code class=\"hljs language-text\">~/courses/\n├── CSC5010_人工智能/\n│   ├── lectures/\n│   │   ├── 01 绪论.pdf\n│   │   └── 02 搜索算法.pdf\n│   ├── assignments/hw1/\n│   │   ├── hw1.pdf\n│   │   └── starter.zip\n│   ├── tutorials/tutorial01.ipynb\n│   └── announcements.md\n├── MAT1001_微积分/\n└── due.md\n</code></pre>\n<p>重复运行只会下新增的文件，已经有的直接跳过，所以你可以每天（甚至每次开机）跑一遍。</p>\n<p><strong>它只读你自己账号里本来就能看到的内容</strong>：不回传作业、不代签到、不抓成绩、不绕过任何权限。</p>\n<h2 id=\"它能帮你做什么\"><a href=\"#它能帮你做什么\">它能帮你做什么</a></h2>\n<ul>\n<li><strong>课件不再散落</strong>：一门课一个文件夹，课件 / 作业 / 指导自动分类，作业还会按 <code>hw1</code> <code>hw2</code> 归档。</li>\n<li><strong>待办不用自己记</strong>：全部课程的截止时间汇总进一份 <code>due.md</code>，按「已逾期 → 今天 → 明天 → 未来 7 天 → 之后」排好序。</li>\n<li><strong>公告里藏着的考试也算进去</strong>：很多老师只在公告里写「Midterm: November 1」，这类测验、考试、作业 deadline 会一起收进待办。</li>\n<li><strong>做完可以打勾</strong>：每条待办都是 <code>- [ ]</code>，手动改成 <code>- [x]</code> 就行，下次同步不会把你的勾选擦掉。</li>\n</ul>\n<p><code>due.md</code> 长这样：</p>\n<pre><code class=\"hljs language-markdown\"><span class=\"hljs-section\">## 已逾期（1）</span>\n\n<span class=\"hljs-bullet\">-</span> [<span class=\"hljs-string\"> </span>] <span class=\"hljs-strong\">**2026-10-12**</span>（逾期 2 天） — [<span class=\"hljs-string\">CSC5010</span>](<span class=\"hljs-link\">…</span>) — 作业 3 实验报告\n\n<span class=\"hljs-section\">## 今天（1）</span>\n\n<span class=\"hljs-bullet\">-</span> [<span class=\"hljs-string\"> </span>] <span class=\"hljs-strong\">**2026-10-14**</span>（今天） — [<span class=\"hljs-string\">MAT1001</span>](<span class=\"hljs-link\">…</span>) — 习题 5\n\n<span class=\"hljs-section\">## 未来 7 天（3）</span>\n\n<span class=\"hljs-bullet\">-</span> [<span class=\"hljs-string\">x</span>] <span class=\"hljs-strong\">**2026-10-17**</span>（还有 3 天） — [<span class=\"hljs-string\">ENG1001</span>](<span class=\"hljs-link\">…</span>) — Essay 1 初稿\n<span class=\"hljs-bullet\">-</span> [<span class=\"hljs-string\"> </span>] <span class=\"hljs-strong\">**2026-10-21**</span>（还有 7 天） — [<span class=\"hljs-string\">MAT1001</span>](<span class=\"hljs-link\">…</span>) — 【考试】期中考试\n</code></pre>\n<h2 id=\"安装\"><a href=\"#安装\">安装</a></h2>\n<p>支持 Windows 10/11 和 macOS（Intel / Apple Silicon）。需要电脑上装了 <strong>Chrome 或 Edge</strong>——Windows 自带的 Edge 就够了，不用额外下载。</p>\n<h3 id=\"方式一uv推荐不用先装-python\"><a href=\"#方式一uv推荐不用先装-python\">方式一：uv（推荐，不用先装 Python）</a></h3>\n<p><code>uv</code> 是一个 Python 工具管理器，装软件时自动挑一个兼容的 Python，不会把系统里的 Python 搞乱。</p>\n<p>Windows（PowerShell）：</p>\n<pre><code class=\"hljs language-powershell\">winget install --id Git.Git -e\npowershell -ExecutionPolicy ByPass -c &quot;irm https://astral.sh/uv/install.ps1 | iex&quot;\n</code></pre>\n<p>macOS（先装 <a href=\"https://brew.sh/\">Homebrew</a>）：</p>\n<pre><code class=\"hljs language-bash\">brew install git uv\n</code></pre>\n<p><strong>然后重开终端</strong>，执行：</p>\n<pre><code class=\"hljs language-bash\">uv tool install bb-sync\nbb-sync doctor\n</code></pre>\n<h3 id=\"方式二pip\"><a href=\"#方式二pip\">方式二：pip</a></h3>\n<p>机器上已经有 Python 3.11 或更新版本的话，pip 也行：</p>\n<pre><code class=\"hljs language-bash\">pip install --user bb-sync\n</code></pre>\n<p>macOS 上一般用 <code>pip3 install --user bb-sync</code>。装完之后：</p>\n<ul>\n<li>能直接敲 <code>bb-sync</code> 就没问题；</li>\n<li>如果提示「找不到命令」，说明 Python 的脚本目录不在 PATH 里，这时候把 <code>bb-sync</code> 换成 <code>python -m bb_sync</code> 就能用（例如 <code>python -m bb_sync doctor</code>）；</li>\n<li>不想污染系统 Python 也没关系，用 <a href=\"https://pipx.pypa.io/\">pipx</a> 更干净：<code>pipx install bb-sync</code>。</li>\n</ul>\n<p><code>bb-sync doctor</code> 用来检查环境，会逐项告诉你哪里没准备好：</p>\n<pre><code class=\"hljs language-text\">bb-sync 2.2.0 — doctor\n\n[✓] Python     3.12.14\n[✓] git        git version 2.5x\n[✓] 浏览器      Chrome (C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe)\n[✓] 网络       https://bb.cuhk.edu.cn 可达\n[✓] 凭据       未配置（首次运行会提示录入）\n[✓] 浏览器后端  未运行（下次同步自动启动）\n</code></pre>\n<p>第一次装完，凭据显示「未配置」、浏览器显示「未运行」都是正常的。</p>\n<h2 id=\"第一次使用\"><a href=\"#第一次使用\">第一次使用</a></h2>\n<ol>\n<li>\n<p>保存学号和密码：</p>\n<pre><code class=\"hljs language-bash\">bb-sync auth login\n</code></pre>\n<p>密码存在 Windows 凭据管理器 / macOS 钥匙串里，不会写进配置文件，也不会发到任何服务器。macOS 可能弹一次钥匙串授权，选允许。</p>\n</li>\n<li>\n<p>先跑一次能看到浏览器的同步（方便确认登录成功、需要的话手动过验证码）：</p>\n<pre><code class=\"hljs language-bash\">bb-sync run --headed\n</code></pre>\n<p>浏览器会自动登录、开始下载，<strong>跑完自己关掉</strong>。登录状态会记住，之后不用每次登录。</p>\n</li>\n<li>\n<p>以后就一句话：</p>\n<pre><code class=\"hljs language-bash\">bb-sync run\n</code></pre>\n</li>\n</ol>\n<p>默认下载到 <code>~/courses</code>（Windows 是 <code>C:\\Users\\&lt;你&gt;\\courses</code>）。想换个地方：</p>\n<pre><code class=\"hljs language-bash\">bb-sync config <span class=\"hljs-built_in\">set</span> root <span class=\"hljs-string\">&quot;~/University/courses&quot;</span>\n</code></pre>\n<h2 id=\"常用命令\"><a href=\"#常用命令\">常用命令</a></h2>\n<table><thead><tr><th>命令</th><th>作用</th></tr></thead><tbody><tr><td><code>bb-sync run</code></td><td>增量同步全部课程，并更新 <code>due.md</code></td></tr><tr><td><code>bb-sync run --course CSC5010</code></td><td>只同步某一门课（可重复写多个）</td></tr><tr><td><code>bb-sync run --dry-run</code></td><td>先看看会下哪些东西，不写文件</td></tr><tr><td><code>bb-sync due</code></td><td>只重新生成待办 <code>due.md</code>，不下载课件</td></tr><tr><td><code>bb-sync course list</code></td><td>列出你这学期有哪些课</td></tr><tr><td><code>bb-sync auth login</code> / <code>logout</code> / <code>status</code></td><td>录入 / 删除 / 查看保存的凭据</td></tr><tr><td><code>bb-sync config set root &lt;目录&gt;</code></td><td>改下载位置</td></tr><tr><td><code>bb-sync doctor</code></td><td>检查环境</td></tr><tr><td><code>bb-sync --help</code></td><td>看完整帮助</td></tr></tbody></table>\n<p><code>bb-sync run</code> 结束时会在最后逐条列出<strong>这次真正新下载的文件</strong>，没有新文件就不打印；<code>due.md</code> 没变化时也不会重写，屏幕上会提示一句。</p>\n<h2 id=\"常见问题\"><a href=\"#常见问题\">常见问题</a></h2>\n<p><strong><code>bb-sync</code> 找不到？</strong>\n重开终端。uv 装的还可以执行 <code>uv tool update-shell</code> 后再重开；pip 装的试 <code>python -m bb_sync</code>。</p>\n<p><strong><code>doctor</code> 里网络那项没过？</strong>\nBlackboard 校外也能直接访问，不需要连学校 VPN。所以这项报错一般是本机网络或代理的问题（例如系统代理没法正常转发 HTTPS），关掉代理或换个网络再试一次。只想跳过这项检查可以用 <code>bb-sync doctor --skip-network</code>。</p>\n<p><strong>登录失败？</strong>\n<code>bb-sync auth status</code> 看凭据在不在，然后用 <code>bb-sync run --headed</code> 手动重试一次。还不行的话，<code>~/.bb-sync/</code> 下会留一张失败截图和 <code>debug_login.html</code>，可以拿来排查（提 issue 时也可以附上）。</p>\n<p><strong>想看着浏览器跑、或者连着跑好几条命令？</strong>\n<code>bb-sync run --headed --keep-open</code> 会让窗口留在屏幕上，之后用 <code>bb-sync browser status</code> 看状态、<code>bb-sync browser stop</code> 关掉。</p>\n<p><strong>想换账号？</strong>\n<code>bb-sync auth logout</code> 只删钥匙串里的密码，浏览器里的登录状态还在。要彻底换，先 <code>bb-sync browser stop</code>，再删掉 <code>~/.bb-sync/.browser-profile/</code> 目录，然后重新 <code>bb-sync auth login</code>。</p>\n<h2 id=\"最后\"><a href=\"#最后\">最后</a></h2>\n<p>工具是给自己省事写的，用得上的话欢迎试试；遇到 bug 或者哪门课抓不下来，直接开 issue 就行。仓库里也有几份文档：<a href=\"https://github.com/asdukw/cuhk-shenzhen-blackboard-sync/blob/main/docs/config.md\">配置项说明</a>、<a href=\"https://github.com/asdukw/cuhk-shenzhen-blackboard-sync/blob/main/docs/scripting.md\">接脚本用</a>（<code>--json</code> 输出、退出码）。</p>\n<p>一句免责声明：课程资料的版权归学校和各位老师所有，<strong>下载下来请只用于自己学习，不要二次分发</strong>。</p>\n<ul>\n<li>仓库：<a href=\"https://github.com/asdukw/cuhk-shenzhen-blackboard-sync\">github.com/asdukw/cuhk-shenzhen-blackboard-sync</a></li>\n<li>安装：<code>uv tool install bb-sync</code> 或 <code>pip install --user bb-sync</code></li>\n</ul>",
+		"toc": [
+			{
+				"id": "这是什么",
+				"text": "这是什么",
+				"level": 2
+			},
+			{
+				"id": "它能帮你做什么",
+				"text": "它能帮你做什么",
+				"level": 2
+			},
+			{
+				"id": "安装",
+				"text": "安装",
+				"level": 2
+			},
+			{
+				"id": "方式一uv推荐不用先装-python",
+				"text": "方式一：uv（推荐，不用先装 Python）",
+				"level": 3
+			},
+			{
+				"id": "方式二pip",
+				"text": "方式二：pip",
+				"level": 3
+			},
+			{
+				"id": "第一次使用",
+				"text": "第一次使用",
+				"level": 2
+			},
+			{
+				"id": "常用命令",
+				"text": "常用命令",
+				"level": 2
+			},
+			{
+				"id": "常见问题",
+				"text": "常见问题",
+				"level": 2
+			},
+			{
+				"id": "最后",
+				"text": "最后",
+				"level": 2
+			}
+		]
+	},
+	{
 		"id": 1,
 		"lang": "en",
 		"title": "Building this site with Bun + React",
