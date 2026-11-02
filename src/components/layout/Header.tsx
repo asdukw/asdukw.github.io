@@ -23,7 +23,6 @@ import { useAuth } from "@/lib/AuthContext";
 import { site } from "@/lib/site";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 import { GithubIcon } from "@/components/icons/GithubIcon";
-import avatarUrl from "@/assets/avatar.jpg";
 
 const NAV = [
 	{ to: "/", key: "home", end: true },
@@ -138,7 +137,7 @@ export function Header() {
 				>
 					<span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-md bg-primary text-primary-foreground text-xs font-bold">
 						<img
-							src={avatarUrl}
+							src={site.avatar}
 							alt={site.name}
 							className="h-full w-full object-cover"
 						/>

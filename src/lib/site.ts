@@ -5,6 +5,8 @@ interface SiteConfig {
 	tagline: Record<Lang, string>;
 	description: Record<Lang, string>;
 	github: string;
+	/** Follows the GitHub profile picture; `?size` covers 2x rendering of the 96px hero. */
+	avatar: string;
 	mail: string;
 	keywords: string[];
 }
@@ -20,6 +22,7 @@ export const site: SiteConfig = {
 		en: "asdukw's personal site: writing about code, reading, and life.",
 	},
 	github: "https://github.com/asdukw",
+	avatar: "https://github.com/asdukw.png?size=200",
 	mail: "asdukw@outlook.com",
 	keywords: [
 		"文章",

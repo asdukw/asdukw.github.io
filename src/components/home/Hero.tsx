@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { GithubIcon } from "@/components/icons/GithubIcon";
 import { useLang } from "@/i18n/LanguageContext";
 import { site } from "@/lib/site";
-import avatarUrl from "@/assets/avatar.jpg";
 
 export function Hero() {
 	const { t } = useLang();
@@ -12,7 +11,7 @@ export function Hero() {
 	return (
 		<section className="flex flex-col items-start gap-8 py-8 sm:flex-row sm:items-center sm:py-12">
 			<Avatar className="h-24 w-24 shrink-0 rounded-full border border-border">
-				<AvatarImage src={avatarUrl} alt={site.name} />
+				<AvatarImage src={site.avatar} alt={site.name} />
 				<AvatarFallback className="rounded-full bg-primary text-2xl font-bold text-primary-foreground">
 					{site.name.slice(0, 1).toUpperCase()}
 				</AvatarFallback>
