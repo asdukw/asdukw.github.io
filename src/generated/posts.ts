@@ -22,6 +22,77 @@ export interface GeneratedPost {
 
 export const POSTS: GeneratedPost[] = [
 	{
+		"id": 3,
+		"lang": "zh",
+		"title": "Redis 数据类型怎么选：读 redis.io 的 Compare data types",
+		"date": "2026-11-02",
+		"tags": [
+			"Redis",
+			"数据结构",
+			"笔记"
+		],
+		"excerpt": "读完 redis.io 那页数据类型对比做的笔记：12 个类型的定位、三棵选型决策树、两条内存成本阶梯，以及页面没写清楚的几处坑——比如 Arrays 还是 preview，需要 8.8。",
+		"readingTime": 3,
+		"html": "<h2 id=\"这页在讲什么\"><a href=\"#这页在讲什么\">这页在讲什么</a></h2>\n<p><a href=\"https://redis.io/docs/latest/develop/data-types/compare-data-types/\">Compare data types</a> 是 redis.io 文档里的选型页，副标题一句话说明用途：<em>Choose the best Redis data type for your task</em>。它不教某个类型的命令怎么敲，只回答&quot;这次该用哪个&quot;。</p>\n<p>原文里最该划线的是一句免责声明：</p>\n<blockquote>\n<p>The general-purpose data types have some overlap among their features and indeed, you could probably emulate any of them using just strings and a little creativity.</p>\n</blockquote>\n<p>这句不是修辞。在 Redis 里 GEO 底层就是 sorted set（geohash 当 score），bitmap 和 HyperLogLog 底层就是 string，&quot;只用 string 模拟一切&quot;是有实现依据的。所以选类型的真正成本从来不是&quot;能不能做到&quot;，而是三件事：内存、要不要让服务端算、结构语义由谁维护。</p>\n<h2 id=\"先把-12-个类型摆开\"><a href=\"#先把-12-个类型摆开\">先把 12 个类型摆开</a></h2>\n<p>页面把类型分成两组，这个分组本身就是态度：<strong>专用类型不参与竞争，你有那个问题形状才去拿；通用类型才是互相重叠、需要选的那 8 个。</strong></p>\n<table><thead><tr><th>类型</th><th>结构</th><th>适合</th></tr></thead><tbody><tr><td>Geospatial</td><td>带坐标的字符串</td><td>地理范围查询</td></tr><tr><td>Probabilistic</td><td>近似计数 / 统计</td><td>超大数据集的基数、去重判断</td></tr><tr><td>Time series</td><td>带时间戳的实数点</td><td>指标采集、按时间范围聚合</td></tr><tr><td>Vector sets</td><td>字符串 + 向量（可带元数据）</td><td>向量相似度检索</td></tr><tr><td>Strings</td><td>无结构文本 / 二进制</td><td>计数器、标志位、bitmap</td></tr><tr><td>Arrays</td><td>稀疏、按下标寻址的字符串序列</td><td>事件日志、环形缓冲、稀疏高下标</td></tr><tr><td>Hashes</td><td>一个 key 内的字段-值对</td><td>字段不多、不嵌套的对象</td></tr><tr><td>JSON</td><td>嵌套的数组与对象</td><td>字段多、层级深的复杂文档</td></tr><tr><td>Lists</td><td>简单字符串序列</td><td>队列、栈、双端队列</td></tr><tr><td>Sets</td><td>去重字符串集合</td><td>只要成员关系、不要附加数据</td></tr><tr><td>Sorted sets</td><td>去重字符串 + score</td><td>优先级队列、排行榜、有序集合</td></tr><tr><td>Streams</td><td>每条带字段-值对的序列</td><td>日志追加、消费者组</td></tr></tbody></table>\n<h2 id=\"三棵决策树\"><a href=\"#三棵决策树\">三棵决策树</a></h2>\n<p>页面最实用的部分是三棵决策树，覆盖全部 8 个通用类型。下面是把原文（YAML 形式，见后文）整理成可读形状的版本。</p>\n<h3 id=\"文档类string--hash--json\"><a href=\"#文档类string--hash--json\">文档类：string / hash / JSON</a></h3>\n<pre><code>需要嵌套字段/数组，或用 Redis Search 做地理索引？\n  +-- 是 --&gt; JSON\n  +-- 否 --&gt; 需要 Search 索引，但不要嵌套？\n             +-- 是 --&gt; hash\n             +-- 否 --&gt; 需要对文档里单个字段设过期？\n                        +-- 是 --&gt; hash\n                        +-- 否 --&gt; 频繁按整数下标访问 int/bit 字段？\n                                   +-- 是 --&gt; string\n                                   +-- 否 --&gt; 频繁访问字符串/二进制字段？\n                                              +-- 是 --&gt; hash\n                                              +-- 否 --&gt; string\n</code></pre>\n<p>骨架是&quot;结构复杂度 → 生命周期粒度 → 字段访问方式&quot;。JSON 最灵活也最重；string 最省，但内部结构全归你的应用管。</p>\n<h3 id=\"集合类set--sorted-set--bitmap\"><a href=\"#集合类set--sorted-set--bitmap\">集合类：set / sorted set / bitmap</a></h3>\n<pre><code>需要按任意序或字典序迭代？\n  +-- 是 --&gt; sorted set\n  +-- 否 --&gt; 要给每个键挂额外数据，且不需要集合运算？\n             +-- 是 --&gt; hash\n             +-- 否 --&gt; 键是已知范围内的整数下标？\n                        +-- 是 --&gt; string（bitmap）\n                        +-- 否 --&gt; set\n</code></pre>\n<p>注意第二个分叉：想挂附加数据 <strong>同时</strong> 还要交并差，官方没给现成答案。原文只在正文补了一句组合技巧——另开一个 hash 或 JSON，字段名和集合成员对齐。</p>\n<h3 id=\"序列类list--stream--array\"><a href=\"#序列类list--stream--array\">序列类：list / stream / array</a></h3>\n<pre><code>需要自定义优先级/字典序，或集合运算？\n  +-- 是 --&gt; sorted set\n  +-- 否 --&gt; 要调用方指定整数下标（含稀疏）、服务端聚合、固定大小环形缓冲？\n             +-- 是 --&gt; array\n             +-- 否 --&gt; 主要按时间戳顺序存取，或多消费者读？\n                        +-- 是 --&gt; stream\n                        +-- 否 --&gt; list\n</code></pre>\n<p>list 是兜底。stream 的独占能力是时间戳顺序和消费者组（at-least-once）；array 的独占能力是稀疏下标 O(1)、<code>AROP</code> 服务端聚合、<code>ARRING</code> 环形缓冲。</p>\n<p>三棵树的分叉轴各不相同——文档看&quot;结构复杂度&quot;，集合看&quot;顺序 → 附加数据 → 键空间&quot;，序列看&quot;顺序语义 → 下标控制权 → 时间语义&quot;。同一批类型在三棵树里的出场次序完全不同，说明它们不是同一个排序的两两比较，而是三个不同的问题族。</p>\n<h2 id=\"成本阶梯只有两条\"><a href=\"#成本阶梯只有两条\">成本阶梯只有两条</a></h2>\n<p>原文只给了两条开销阶梯，都是一句话带过，值得单独抄出来：</p>\n<pre><code>文档类   JSON  &gt;  hash  &gt;  string\n集合类   sorted set  &gt;  set  &gt;  string\n</code></pre>\n<p>序列类<strong>没有</strong>阶梯。因为 list / stream / array 三者各有独占能力，排不成一条线——这个空白本身就说明&quot;内存更省&quot;在这类场景里不是主要判据。</p>\n<h2 id=\"只能选它的那几种情况\"><a href=\"#只能选它的那几种情况\">只能选它的那几种情况</a></h2>\n<table><thead><tr><th>只要你要…</th><th>就只能是</th></tr></thead><tbody><tr><td>字段级 TTL</td><td>hash（<code>HEXPIRE</code> 系列，Redis Open Source 7.4 起）</td></tr><tr><td>有序迭代（按 score 或 rank 取范围）</td><td>sorted set</td></tr><tr><td>Search 里对嵌套结构建索引</td><td>JSON</td></tr><tr><td>稀疏下标 O(1)，不为空洞分配内存</td><td>array</td></tr><tr><td>服务端聚合（sum / min / max / 按位）</td><td>array（<code>AROP</code>）</td></tr><tr><td>固定大小环形缓冲</td><td>array（<code>ARRING</code>）</td></tr><tr><td>消费者组、at-least-once 投递</td><td>stream</td></tr><tr><td>位级紧凑 + 交并差</td><td>string（bitmap）</td></tr></tbody></table>\n<p>顺带一个容易踩的细节：array 里 <code>ARLEN</code> 返回的是<strong>最高下标 + 1</strong>（逻辑长度），<code>ARCOUNT</code> 返回的是<strong>非空槽数</strong>。稀疏场景下两者差得很远，别混着用。</p>\n<h2 id=\"页面没说的三件事\"><a href=\"#页面没说的三件事\">页面没说的三件事</a></h2>\n<p><strong>一、Arrays 的成熟度和版本门槛被藏起来了。</strong> Compare 页把 Arrays 和 strings、lists 并列介绍，读起来像个成熟类型。但 arrays 自己的页面第一句是：<em>Array is a new data type that is currently in preview and may be subject to change</em>，命令标注 <code>v8.8.0</code>。照 compare 页直接上手，很可能手上版本根本不认，而且 API 还可能变。</p>\n<p><strong>二、三棵树只管通用类型，专用类型的边界没人管。</strong> 最典型的坑：stream 和 time series 都能存带时间戳的点，什么时候用哪个？页面把 time series 归入 specialized 之后就再没提。我自己现在的判断是——要按时间范围做聚合和保留策略（<code>TS.ADD</code> / <code>TS.RANGE</code> / <code>TS.CREATERULE</code> 那一套）选 time series；要多个消费者按序消费、需要 ack 与 pending 选 stream。但这是我的判断，不是原文。</p>\n<p><strong>三、完全没有运维视角。</strong> 原文说 hash 的字段数没有实际上限，那是能力，不是建议——一个百万字段的 hash 在集群里就是一个热点槽、一个必须整体传输的大 key。字段级 TTL 让 hash 更像一个小型数据库，也让过期成本变得不好估算。这些一句没提。</p>\n<p>还有个有意思的细节：三棵树的定义在文档源码里直接是 YAML，每个节点都带 <code>whyAsk</code>：</p>\n<pre><code class=\"hljs language-yaml\"><span class=\"hljs-attr\">questions:</span>\n  <span class=\"hljs-attr\">root:</span>\n    <span class=\"hljs-attr\">text:</span> <span class=\"hljs-string\">Do</span> <span class=\"hljs-string\">you</span> <span class=\"hljs-string\">need</span> <span class=\"hljs-string\">nested</span> <span class=\"hljs-string\">data</span> <span class=\"hljs-string\">structures</span> <span class=\"hljs-string\">...?</span>\n    <span class=\"hljs-attr\">whyAsk:</span> <span class=\"hljs-string\">JSON</span> <span class=\"hljs-string\">is</span> <span class=\"hljs-string\">the</span> <span class=\"hljs-string\">only</span> <span class=\"hljs-string\">document</span> <span class=\"hljs-string\">type</span> <span class=\"hljs-string\">that</span> <span class=\"hljs-string\">supports</span> <span class=\"hljs-string\">deeply</span> <span class=\"hljs-string\">nested</span> <span class=\"hljs-string\">...</span>\n</code></pre>\n<p>官方把&quot;为什么问这一句&quot;也写成了数据。这种写法值得抄：决策树最难维护的不是结论，是理由；理由和节点存在一起，结论改了理由不会走散。</p>\n<h2 id=\"我的选型顺序\"><a href=\"#我的选型顺序\">我的选型顺序</a></h2>\n<p>从类型出发去比，很容易在 8 个里面绕；倒过来按问题问，基本三五步就收敛：</p>\n<ol>\n<li>有没有专用的形状——地理、近似计数、时序、向量？有就别拿通用类型硬凑。</li>\n<li>需不需要有序迭代或集合运算？这一问把 sorted set 和 set 分开。</li>\n<li>结构是不是嵌套的？嵌套选 JSON；不嵌套但字段多选 hash；只有一个值选 string。</li>\n<li>是不是序列？要时间语义和消费者组选 stream；要下标控制权选 array；只在队头队尾进出选 list。</li>\n<li>最后才比内存。阶梯只有两条，绝大多数业务压根排不到这一步。</li>\n</ol>\n<h2 id=\"参考\"><a href=\"#参考\">参考</a></h2>\n<ul>\n<li><a href=\"https://redis.io/docs/latest/develop/data-types/compare-data-types/\">Compare data types</a></li>\n<li><a href=\"https://redis.io/docs/latest/develop/data-types/arrays/\">Redis arrays</a></li>\n<li><a href=\"https://redis.io/docs/latest/commands/hexpire/\">HEXPIRE</a></li>\n</ul>",
+		"toc": [
+			{
+				"id": "这页在讲什么",
+				"text": "这页在讲什么",
+				"level": 2
+			},
+			{
+				"id": "先把-12-个类型摆开",
+				"text": "先把 12 个类型摆开",
+				"level": 2
+			},
+			{
+				"id": "三棵决策树",
+				"text": "三棵决策树",
+				"level": 2
+			},
+			{
+				"id": "文档类string--hash--json",
+				"text": "文档类：string / hash / JSON",
+				"level": 3
+			},
+			{
+				"id": "集合类set--sorted-set--bitmap",
+				"text": "集合类：set / sorted set / bitmap",
+				"level": 3
+			},
+			{
+				"id": "序列类list--stream--array",
+				"text": "序列类：list / stream / array",
+				"level": 3
+			},
+			{
+				"id": "成本阶梯只有两条",
+				"text": "成本阶梯只有两条",
+				"level": 2
+			},
+			{
+				"id": "只能选它的那几种情况",
+				"text": "只能选它的那几种情况",
+				"level": 2
+			},
+			{
+				"id": "页面没说的三件事",
+				"text": "页面没说的三件事",
+				"level": 2
+			},
+			{
+				"id": "我的选型顺序",
+				"text": "我的选型顺序",
+				"level": 2
+			},
+			{
+				"id": "参考",
+				"text": "参考",
+				"level": 2
+			}
+		]
+	},
+	{
 		"id": 2,
 		"lang": "zh",
 		"title": "bb-sync：把 Blackboard 课件和待办同步到本地",

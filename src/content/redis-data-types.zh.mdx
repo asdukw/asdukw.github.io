@@ -1,0 +1,150 @@
+---
+id: 3
+lang: zh
+title: "Redis 数据类型怎么选：读 redis.io 的 Compare data types"
+date: "2026-11-02"
+tags: ["Redis","数据结构","笔记"]
+excerpt: "读完 redis.io 那页数据类型对比做的笔记：12 个类型的定位、三棵选型决策树、两条内存成本阶梯，以及页面没写清楚的几处坑——比如 Arrays 还是 preview，需要 8.8。"
+---
+
+## 这页在讲什么
+
+[Compare data types](https://redis.io/docs/latest/develop/data-types/compare-data-types/) 是 redis.io 文档里的选型页，副标题一句话说明用途：*Choose the best Redis data type for your task*。它不教某个类型的命令怎么敲，只回答"这次该用哪个"。
+
+原文里最该划线的是一句免责声明：
+
+> The general-purpose data types have some overlap among their features and indeed, you could probably emulate any of them using just strings and a little creativity.
+
+这句不是修辞。在 Redis 里 GEO 底层就是 sorted set（geohash 当 score），bitmap 和 HyperLogLog 底层就是 string，"只用 string 模拟一切"是有实现依据的。所以选类型的真正成本从来不是"能不能做到"，而是三件事：内存、要不要让服务端算、结构语义由谁维护。
+
+## 先把 12 个类型摆开
+
+页面把类型分成两组，这个分组本身就是态度：**专用类型不参与竞争，你有那个问题形状才去拿；通用类型才是互相重叠、需要选的那 8 个。**
+
+| 类型 | 结构 | 适合 |
+| --- | --- | --- |
+| Geospatial | 带坐标的字符串 | 地理范围查询 |
+| Probabilistic | 近似计数 / 统计 | 超大数据集的基数、去重判断 |
+| Time series | 带时间戳的实数点 | 指标采集、按时间范围聚合 |
+| Vector sets | 字符串 + 向量（可带元数据） | 向量相似度检索 |
+| Strings | 无结构文本 / 二进制 | 计数器、标志位、bitmap |
+| Arrays | 稀疏、按下标寻址的字符串序列 | 事件日志、环形缓冲、稀疏高下标 |
+| Hashes | 一个 key 内的字段-值对 | 字段不多、不嵌套的对象 |
+| JSON | 嵌套的数组与对象 | 字段多、层级深的复杂文档 |
+| Lists | 简单字符串序列 | 队列、栈、双端队列 |
+| Sets | 去重字符串集合 | 只要成员关系、不要附加数据 |
+| Sorted sets | 去重字符串 + score | 优先级队列、排行榜、有序集合 |
+| Streams | 每条带字段-值对的序列 | 日志追加、消费者组 |
+
+## 三棵决策树
+
+页面最实用的部分是三棵决策树，覆盖全部 8 个通用类型。下面是把原文（YAML 形式，见后文）整理成可读形状的版本。
+
+### 文档类：string / hash / JSON
+
+```
+需要嵌套字段/数组，或用 Redis Search 做地理索引？
+  +-- 是 --> JSON
+  +-- 否 --> 需要 Search 索引，但不要嵌套？
+             +-- 是 --> hash
+             +-- 否 --> 需要对文档里单个字段设过期？
+                        +-- 是 --> hash
+                        +-- 否 --> 频繁按整数下标访问 int/bit 字段？
+                                   +-- 是 --> string
+                                   +-- 否 --> 频繁访问字符串/二进制字段？
+                                              +-- 是 --> hash
+                                              +-- 否 --> string
+```
+
+骨架是"结构复杂度 → 生命周期粒度 → 字段访问方式"。JSON 最灵活也最重；string 最省，但内部结构全归你的应用管。
+
+### 集合类：set / sorted set / bitmap
+
+```
+需要按任意序或字典序迭代？
+  +-- 是 --> sorted set
+  +-- 否 --> 要给每个键挂额外数据，且不需要集合运算？
+             +-- 是 --> hash
+             +-- 否 --> 键是已知范围内的整数下标？
+                        +-- 是 --> string（bitmap）
+                        +-- 否 --> set
+```
+
+注意第二个分叉：想挂附加数据 **同时** 还要交并差，官方没给现成答案。原文只在正文补了一句组合技巧——另开一个 hash 或 JSON，字段名和集合成员对齐。
+
+### 序列类：list / stream / array
+
+```
+需要自定义优先级/字典序，或集合运算？
+  +-- 是 --> sorted set
+  +-- 否 --> 要调用方指定整数下标（含稀疏）、服务端聚合、固定大小环形缓冲？
+             +-- 是 --> array
+             +-- 否 --> 主要按时间戳顺序存取，或多消费者读？
+                        +-- 是 --> stream
+                        +-- 否 --> list
+```
+
+list 是兜底。stream 的独占能力是时间戳顺序和消费者组（at-least-once）；array 的独占能力是稀疏下标 O(1)、`AROP` 服务端聚合、`ARRING` 环形缓冲。
+
+三棵树的分叉轴各不相同——文档看"结构复杂度"，集合看"顺序 → 附加数据 → 键空间"，序列看"顺序语义 → 下标控制权 → 时间语义"。同一批类型在三棵树里的出场次序完全不同，说明它们不是同一个排序的两两比较，而是三个不同的问题族。
+
+## 成本阶梯只有两条
+
+原文只给了两条开销阶梯，都是一句话带过，值得单独抄出来：
+
+```
+文档类   JSON  >  hash  >  string
+集合类   sorted set  >  set  >  string
+```
+
+序列类**没有**阶梯。因为 list / stream / array 三者各有独占能力，排不成一条线——这个空白本身就说明"内存更省"在这类场景里不是主要判据。
+
+## 只能选它的那几种情况
+
+| 只要你要… | 就只能是 |
+| --- | --- |
+| 字段级 TTL | hash（`HEXPIRE` 系列，Redis Open Source 7.4 起） |
+| 有序迭代（按 score 或 rank 取范围） | sorted set |
+| Search 里对嵌套结构建索引 | JSON |
+| 稀疏下标 O(1)，不为空洞分配内存 | array |
+| 服务端聚合（sum / min / max / 按位） | array（`AROP`） |
+| 固定大小环形缓冲 | array（`ARRING`） |
+| 消费者组、at-least-once 投递 | stream |
+| 位级紧凑 + 交并差 | string（bitmap） |
+
+顺带一个容易踩的细节：array 里 `ARLEN` 返回的是**最高下标 + 1**（逻辑长度），`ARCOUNT` 返回的是**非空槽数**。稀疏场景下两者差得很远，别混着用。
+
+## 页面没说的三件事
+
+**一、Arrays 的成熟度和版本门槛被藏起来了。** Compare 页把 Arrays 和 strings、lists 并列介绍，读起来像个成熟类型。但 arrays 自己的页面第一句是：*Array is a new data type that is currently in preview and may be subject to change*，命令标注 `v8.8.0`。照 compare 页直接上手，很可能手上版本根本不认，而且 API 还可能变。
+
+**二、三棵树只管通用类型，专用类型的边界没人管。** 最典型的坑：stream 和 time series 都能存带时间戳的点，什么时候用哪个？页面把 time series 归入 specialized 之后就再没提。我自己现在的判断是——要按时间范围做聚合和保留策略（`TS.ADD` / `TS.RANGE` / `TS.CREATERULE` 那一套）选 time series；要多个消费者按序消费、需要 ack 与 pending 选 stream。但这是我的判断，不是原文。
+
+**三、完全没有运维视角。** 原文说 hash 的字段数没有实际上限，那是能力，不是建议——一个百万字段的 hash 在集群里就是一个热点槽、一个必须整体传输的大 key。字段级 TTL 让 hash 更像一个小型数据库，也让过期成本变得不好估算。这些一句没提。
+
+还有个有意思的细节：三棵树的定义在文档源码里直接是 YAML，每个节点都带 `whyAsk`：
+
+```yaml
+questions:
+  root:
+    text: Do you need nested data structures ...?
+    whyAsk: JSON is the only document type that supports deeply nested ...
+```
+
+官方把"为什么问这一句"也写成了数据。这种写法值得抄：决策树最难维护的不是结论，是理由；理由和节点存在一起，结论改了理由不会走散。
+
+## 我的选型顺序
+
+从类型出发去比，很容易在 8 个里面绕；倒过来按问题问，基本三五步就收敛：
+
+1. 有没有专用的形状——地理、近似计数、时序、向量？有就别拿通用类型硬凑。
+2. 需不需要有序迭代或集合运算？这一问把 sorted set 和 set 分开。
+3. 结构是不是嵌套的？嵌套选 JSON；不嵌套但字段多选 hash；只有一个值选 string。
+4. 是不是序列？要时间语义和消费者组选 stream；要下标控制权选 array；只在队头队尾进出选 list。
+5. 最后才比内存。阶梯只有两条，绝大多数业务压根排不到这一步。
+
+## 参考
+
+- [Compare data types](https://redis.io/docs/latest/develop/data-types/compare-data-types/)
+- [Redis arrays](https://redis.io/docs/latest/develop/data-types/arrays/)
+- [HEXPIRE](https://redis.io/docs/latest/commands/hexpire/)
