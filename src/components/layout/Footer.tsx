@@ -3,46 +3,36 @@ import { GithubIcon } from "@/components/icons/GithubIcon";
 import { useLang } from "@/i18n/LanguageContext";
 import { site } from "@/lib/site";
 
+// 一行到底。站点身份（名字、标语、联系方式）已经交给 Hero 和首页的关于区块，
+// Footer 只留版权和入口，不再重复一遍。
 export function Footer() {
-	const { lang, t } = useLang();
+	const { t } = useLang();
 	const year = new Date().getFullYear();
 
 	return (
 		<footer className="border-t border-border/60">
-			<div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
-				<div className="flex flex-col items-center gap-4 text-center sm:items-start sm:text-left">
-					<div>
-						<div className="text-sm font-semibold">{site.name}</div>
-						<div className="mt-1 text-sm text-muted-foreground">
-							{site.tagline[lang]}
-						</div>
-					</div>
-
-					<div className="flex items-center gap-4">
-						<a
-							href={site.github}
-							target="_blank"
-							rel="noopener noreferrer"
-							className="text-muted-foreground transition-colors hover:text-foreground"
-							aria-label="GitHub"
-						>
-							<GithubIcon />
-						</a>
-						<a
-							href={`mailto:${site.mail}`}
-							className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-							aria-label="Email"
-							title={site.mail}
-						>
-							<Mail className="h-4 w-4" />
-						</a>
-					</div>
-
-					<div className="flex w-full max-w-md flex-col items-center gap-1 border-t border-border/40 pt-5 text-xs text-muted-foreground sm:items-start">
-						<span>
-							© {year} {site.name} · {t.footer.rights}
-						</span>
-					</div>
+			<div className="mx-auto flex max-w-4xl flex-col items-center justify-between gap-3 px-4 py-8 text-xs text-muted-foreground sm:flex-row sm:px-6">
+				<span>
+					© {year} {site.name} · {t.footer.rights}
+				</span>
+				<div className="flex items-center gap-1">
+					<a
+						href={site.github}
+						target="_blank"
+						rel="noopener noreferrer"
+						className="inline-flex size-8 items-center justify-center rounded-md transition-colors hover:bg-accent hover:text-foreground"
+						aria-label="GitHub"
+					>
+						<GithubIcon />
+					</a>
+					<a
+						href={`mailto:${site.mail}`}
+						className="inline-flex size-8 items-center justify-center rounded-md transition-colors hover:bg-accent hover:text-foreground"
+						aria-label="Email"
+						title={site.mail}
+					>
+						<Mail className="h-4 w-4" />
+					</a>
 				</div>
 			</div>
 		</footer>

@@ -3,13 +3,15 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { GithubIcon } from "@/components/icons/GithubIcon";
 import { useLang } from "@/i18n/LanguageContext";
+import { getPosts } from "@/lib/posts";
 import { site } from "@/lib/site";
 
 export function Hero() {
-	const { t } = useLang();
+	const { lang, t } = useLang();
+	const latest = getPosts(lang, 1)[0];
 
 	return (
-		<section className="flex flex-col items-start gap-8 py-8 sm:flex-row sm:items-center sm:py-12">
+		<section className="flex flex-col items-start gap-6 py-8 sm:flex-row sm:items-center sm:py-12">
 			<Avatar className="h-24 w-24 shrink-0 rounded-full border border-border">
 				<AvatarImage src={site.avatar} alt={site.name} />
 				<AvatarFallback className="rounded-full bg-primary text-2xl font-bold text-primary-foreground">
@@ -22,17 +24,17 @@ export function Hero() {
 					<p className="text-sm font-medium text-muted-foreground">
 						{t.home.greeting}
 					</p>
+					{/* 名字后面那个点是全站唯一的品牌色落点，比整段渐变文字克制。 */}
 					<h1 className="mt-1 text-3xl font-bold tracking-tight sm:text-4xl">
-						<span className="bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
-							{site.name}
-						</span>
+						{site.name}
+						<span className="text-brand">.</span>
 					</h1>
 					<p className="mt-3 max-w-md text-sm leading-relaxed text-muted-foreground sm:text-base">
 						{t.home.subtitle}
 					</p>
 				</div>
 
-				<div className="flex items-center gap-2">
+				<div className="flex flex-wrap items-center gap-2">
 					<Button asChild size="sm">
 						<Link to="/post">{t.nav.posts}</Link>
 					</Button>
@@ -41,6 +43,14 @@ export function Hero() {
 							<GithubIcon />
 						</a>
 					</Button>
+					{latest && (
+						<span className="text-xs text-muted-foreground">
+							{t.home.lastUpdated} ·{" "}
+							<time dateTime={latest.date} className="tabular-nums">
+								{latest.date}
+							</time>
+						</span>
+					)}
 				</div>
 			</div>
 		</section>

@@ -13,7 +13,7 @@ export function RecentPosts({
 	const posts = getPosts(lang, limit);
 
 	return (
-		<section className="mt-10">
+		<section>
 			<div className="mb-4 flex items-center justify-between">
 				<h2 className="text-lg font-semibold tracking-tight">
 					{POST_INFO.name[lang]}

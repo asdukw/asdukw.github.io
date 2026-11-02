@@ -13,6 +13,7 @@ export interface Dict {
 		greeting: string;
 		subtitle: string;
 		viewAll: string;
+		lastUpdated: string;
 	};
 	list: {
 		total: string;
@@ -88,6 +89,7 @@ export const zh: Dict = {
 		greeting: "你好，我是",
 		subtitle: "在这里记录代码、阅读与生活的点滴。",
 		viewAll: "查看全部",
+		lastUpdated: "最近更新",
 	},
 	list: {
 		total: "共 {count,number,integer} 篇",
@@ -163,6 +165,7 @@ export const en: Dict = {
 		greeting: "Hi, I'm",
 		subtitle: "Writing down code, reading, and the small things in life.",
 		viewAll: "View all",
+		lastUpdated: "Last updated",
 	},
 	list: {
 		total: "{count,number,integer} posts",
