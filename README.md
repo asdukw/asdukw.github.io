@@ -1,90 +1,108 @@
 # asdukw · 随笔与技术博客
 
-基于 Bun + React + shadcn/ui 的个人网站，中英双语，部署到 Cloudflare Pages（`https://asdukw.pages.dev`）。动态能力直接使用 Supabase，不需要自行维护 FastAPI、Bun API 或 OAuth Worker 服务。
+基于 Bun + React 19 + shadcn/ui 的个人网站，中英双语，部署在 Cloudflare Pages：<https://asdukw.pages.dev>。
+
+文章是仓库里的 MDX，构建期预渲染成 HTML 静态数据，**运行时不依赖任何数据库**；评论和 GitHub 登录由 `worker/` 里一个独立的 Cloudflare Worker + D1 提供，站点没有评论 API 时也能正常浏览。
 
 ## 技术栈
 
-- **Bun** — 前端开发运行时与打包器
-- **React 19 + react-router** — 前端框架与路由（BrowserRouter，干净 URL）
-- **Tailwind CSS v4 + shadcn/ui** — 样式与 UI 组件
-- **Supabase Postgres** — 文章内容和互动数据，浏览器运行时读取
-- **Supabase Auth + Postgres + RLS** — GitHub 登录、用户资料、评论、点赞、收藏与阅读进度
-- **Cloudflare Pages** — 静态站点托管与发布
+- **Bun** — 开发运行时、打包器与静态服务器
+- **React 19 + react-router** — 页面与路由（`BrowserRouter`，干净 URL）
+- **Tailwind CSS v4 + shadcn/ui** — 样式与 UI 组件，支持浅色 / 深色 / 跟随系统
+- **MDX（构建期）** — 文章源文件经 `scripts/mdx.ts` 预渲染为静态 HTML
+- **Cloudflare Pages** — 静态站点托管
+- **Cloudflare Workers + D1** — 评论、点赞、GitHub OAuth 会话
 
 ## 本地开发
 
-```powershell
-Copy-Item .env.example .env
-# 编辑 .env，填写 BUN_PUBLIC_SUPABASE_URL 和 BUN_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+```bash
 bun install
-bun dev
+bun dev          # 编译文章 + CSS，然后起 dev server（默认 http://localhost:3000）
 ```
 
-常用命令：
+`.env` 只需要一个前端可见变量：
+
+```text
+BUN_PUBLIC_API_BASE=http://localhost:8787   # 指向本地评论 Worker；缺省时评论区显示"暂时不可用"
+```
+
+想连本地评论 Worker（GitHub 登录、发评论）：
 
 ```bash
-bun run css                 # 编译 Tailwind CSS（dev/build 会自动执行）
-bun run build               # 生产构建 → dist/
-bun start                   # 启动 Bun 静态服务器
-bun x tsc --noEmit          # TypeScript 类型检查
+bun run dev:api  # wrangler dev，跑 worker/，默认 http://localhost:8787
 ```
 
-前端只需要 Supabase 的 URL 和 publishable key。publishable key 会进入浏览器构建产物，因此数据库权限必须由 Supabase RLS 和 RPC 函数控制，不能把 `service_role` 或其他 secret key 放入这些变量。
+`BUN_PUBLIC_*` 变量会进入浏览器构建产物，只能放公开信息；GitHub client secret 只存在 Worker secret 里。
 
-## Supabase 初始化
+## 常用命令
 
-1. 在 Supabase Dashboard 的 Authentication → Providers 中启用 GitHub，并把 GitHub OAuth App 的 callback URL 设置为 `https://<project-ref>.supabase.co/auth/v1/callback`。
-2. 在 Supabase 的 URL Configuration 中把 `https://asdukw.pages.dev` 和本地开发地址加入 Site URL / Redirect URLs。
-3. 登录并关联本地 Supabase 项目：
+| 命令 | 作用 |
+| --- | --- |
+| `bun dev` | 编译内容与 CSS，起 dev server（HMR） |
+| `bun run build` | 生产构建 → `dist/` |
+| `bun start` | 以 production 模式跑 Bun 静态服务器 |
+| `bun run build:content` | `src/content/*.mdx` → `src/generated/posts.ts` |
+| `bun run css` / `css:watch` | Tailwind CLI 编译 `src/index.css` → `src/styles.css` |
+| `bun run typecheck` / `typecheck:worker` | 前端 / Worker 各自的 TypeScript 检查 |
+| `bun run lint` | ESLint |
+| `bun run smoke` | SSR 渲染所有路由，断言文章标题与标题锚点存在 |
+| `bun run dev:api` / `deploy:api` | 本地运行 / 部署评论 Worker |
+| `bun run deploy:pages` | 构建并部署 Cloudflare Pages |
 
-   ```powershell
-   bun x supabase login
-   bun x supabase link --project-ref <project-ref>
-   ```
+没有独立的 test runner 或 formatter。
 
-4. 先预览、再执行仓库中的全部 migration：
+## 写文章
 
-   ```powershell
-   bun x supabase db push --dry-run
-   bun x supabase db push
-   ```
+文章源文件是 `src/content/<name>.<lang>.mdx`，同一篇文章的中英文版本共用同一个 `id`：
 
-   初始 migration 创建用户、评论和互动相关表；文章 migration 会把仓库原有 MDX 的中英文内容写入 `public.posts` 和 `public.post_translations`。如果已经在 SQL Editor 手动执行过同一份 SQL，不要直接重复推送，先核对 migration history。
+```yaml
+---
+id: 1
+lang: zh          # zh | en
+title: "标题"
+date: "2026-08-28"
+tags: ["Bun", "React"]
+excerpt: "摘要"
+---
+```
 
-5. 第一次 GitHub 登录后，在 SQL Editor 中将自己的资料设为管理员：
+流程是：写 MDX → `bun run build:content` → **把 `src/generated/posts.ts` 一起提交**。CI 会检查生成文件与 MDX 是否同步。
 
-   ```sql
-   update public.users
-   set is_admin = true
-   where auth_user_id = '你的 Supabase Auth user id';
-   ```
+- 公开地址用 `id`：`/post/1`。id 发布后不要再改，否则评论会对不上文章。
+- 正文支持 Markdown + GFM（表格、删除线、任务列表），**不支持自定义 JSX 组件**——站点渲染的是静态 HTML，没有东西可以 hydrate。
+- 目录（TOC）只收集 h2/h3。
+- 删文章只删 MDX，评论会留在 D1 里变成孤儿，需要手动清理。
 
-仓库使用 Supabase CLI 管理数据库 migration；当前不再使用 Alembic 或 Python 数据库服务。
+## 评论 Worker
 
-## 文章怎么管理
+`worker/` 是一个独立的 Cloudflare Worker，代码分 `index.ts`（路由）、`auth.ts`（GitHub OAuth）、`session.ts`、`comments.ts`、`http.ts`，表结构在 `worker/schema.sql`。
 
-文章存储在 Supabase：`public.posts` 保存文章身份和发布状态，`public.posts_i18n` 保存 `zh` / `en` 两个版本的标题、摘要、标签、原始 MDX、HTML 和目录。前端公开读取已发布文章，文章写入通过受限 RPC 完成。
+- 端点：`GET /api/auth/login`、`GET /api/auth/callback`、`GET /api/auth/user`、`POST /api/auth/logout`、`GET|POST /api/comments`、`POST /api/comments/:id/like`、`POST /api/comments/:id/status`（管理员隐藏评论）、`GET /api/health`。
+- 前端与 Worker 不同源，会话 token 走 `Authorization: Bearer` 存在 `localStorage`，不用 cookie；OAuth 回调用 URL fragment 传 token，读到后立刻清掉地址栏。
+- 管理员由 `worker/wrangler.toml` 的 `ADMIN_GITHUB_LOGINS` 决定；`ALLOWED_ORIGINS` 同时用于 CORS 和登录后的跳转白名单，加自定义域名时它要和 `SITE_URL` 一起改。
 
-目前项目还没有独立的文章管理页面。新增或修改文章时，应使用受管理员权限保护的 RPC/SQL 流程，不要重新添加 `src/content/*.mdx` 文件；数据库结构变化必须新增 `supabase/migrations/` 文件。
+首次部署：
+
+```bash
+bun x wrangler d1 create asdukw-comments      # 把 database_id 填进 worker/wrangler.toml
+bun x wrangler d1 execute asdukw-comments --remote --file worker/schema.sql
+bun x wrangler secret put GH_CLIENT_SECRET --config worker/wrangler.toml
+bun run deploy:api
+```
+
+GitHub OAuth App 的 callback 必须指向 `https://<worker>.workers.dev/api/auth/callback`。D1 表结构变更不在 workflow 里自动执行，需要手动跑 `schema.sql`（全部 `create ... if not exists`，可重复执行；改已有表时另写 `alter table`）。
 
 ## 部署
 
-GitHub Actions 的 [`deploy.yml`](.github/workflows/deploy.yml) 负责构建并发布 Cloudflare Pages。需要配置以下 GitHub Actions secrets：
+GitHub Actions 的 [`deploy.yml`](.github/workflows/deploy.yml) 在 `master` 上按前端 / Worker 路径变化触发，也可手动触发：
 
-```text
-BUN_PUBLIC_SUPABASE_URL
-BUN_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-CLOUDFLARE_API_TOKEN
-CLOUDFLARE_ACCOUNT_ID
-```
+- **deploy-pages**：`build:content` → 校验生成文件无漂移 → `typecheck` → `typecheck:worker` → `lint` → `smoke` → `build` → `wrangler pages deploy`
+- **deploy-worker**：`wrangler deploy --config worker/wrangler.toml`
 
-本地手动部署：`bun run deploy:pages`。Cloudflare token 只由 Wrangler 读取，不会被打包进前端；本地真实值放在 `.env`，不要提交。
+需要的 GitHub secrets：`BUN_PUBLIC_API_BASE`、`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`。token 至少要有 **Cloudflare Pages: Edit**、**Workers Scripts: Edit**、**D1: Edit** 三个权限。
 
-GitHub Auth provider 配置属于 Supabase 项目设置，不会随 Cloudflare Pages 发布自动执行。修改 `supabase/migrations/` 后，需要通过已关联的 Supabase CLI 流程执行并验证；Pages workflow 不会自动修改数据库。
+本地手动部署 `bun run deploy:pages` 会把 `.env` 里的 `BUN_PUBLIC_API_BASE` 打进包里，正式发布走 CI（真实环境变量优先于 `.env`）。
 
-## 动态功能的边界
+## 更多
 
-- GitHub 只作为 Supabase Auth 的身份提供方，浏览器通过 `@supabase/supabase-js` 完成登录和会话持久化。
-- 评论区通过 Supabase RPC 访问数据库；点赞使用 `set_comment_like`，评论支持 `parent_id` 树形回复。
-- 用户只能通过已授权的 RPC 写入评论、点赞、收藏和阅读进度；RLS 负责阻止浏览器直接读写受保护的表。
-- 生产站点是静态前端，仓库中不再包含 `backend/`、FastAPI、SQLAlchemy、Alembic 或 OAuth Worker。
+标了 ⚠️ 的那种坑都在 [AGENTS.md](AGENTS.md)：为什么构建必须带 `--public-path=/`、为什么不能生成 `dist/404.html`、两个 `index.html`、两个 lockfile、favicon 怎么来的等。
