@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { Link, useParams } from "react-router";
 import { ArrowLeft, ArrowRight, Clock } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
@@ -9,7 +9,6 @@ import { TOC } from "@/components/blog/TOC";
 import { MobileToc } from "@/components/blog/MobileToc";
 import { AuthorCard } from "@/components/blog/AuthorCard";
 import { RelatedPosts } from "@/components/blog/RelatedPosts";
-import { ReadingProgress } from "@/components/blog/ReadingProgress";
 import { CommentsSection } from "@/components/blog/CommentsSection";
 import { useLang, useLangPath } from "@/i18n/LanguageContext";
 import { getPost, getPostTranslations, getPosts, type Post } from "@/lib/posts";
@@ -65,7 +64,6 @@ export function PostDetailPage() {
 	const { id } = useParams();
 	const { lang, t, setLang } = useLang();
 	const p = useLangPath();
-	const articleRef = useRef<HTMLElement>(null);
 	const posts = useMemo(() => getPosts(lang), [lang]);
 	const postId = Number(id);
 	const post = Number.isSafeInteger(postId) ? getPost(postId, lang) : undefined;
@@ -91,8 +89,6 @@ export function PostDetailPage() {
 
 	return (
 		<div>
-			<ReadingProgress target={articleRef} />
-
 			<Link
 				to={p("/post")}
 				className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -102,7 +98,7 @@ export function PostDetailPage() {
 			</Link>
 
 			<div className="mt-6 grid gap-10 lg:grid-cols-[minmax(0,1fr)_220px]">
-				<article className="min-w-0" ref={articleRef}>
+				<article className="min-w-0">
 					<header>
 						<div className="flex items-start justify-between gap-4">
 							<h1 className="text-2xl font-bold leading-snug tracking-tight sm:text-3xl">

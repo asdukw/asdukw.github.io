@@ -24,7 +24,7 @@
 - `src/App.tsx` — 根组件：`BrowserRouter` + `LanguageProvider` + `TooltipProvider`，路由子树来自 `src/routes.tsx`
 - `src/routes.tsx` — 路由树：中文裸路径与 `/en` 子树共用同一组页面组件，`/zh/*` 归一化重定向也在这里。smoke 脚本与构建期预渲染复用这棵树
 - `src/pages/` — 每个路由页面对应一个文件（Home / PostListPage / PostDetailPage / About / NotFound）
-- `src/components/` — `layout/`（Header/Footer/Layout）、`blog/`（文章行 `PostRow`/列表/正文/目录/作者卡/相关文章/进度条）、`home/`（Hero/RecentPosts/AboutBlock）、`ui/`（shadcn）、`icons/`
+- `src/components/` — `layout/`（Header/Footer/Layout）、`blog/`（文章行 `PostRow`/列表/正文/目录/作者卡/相关文章）、`home/`（Hero/RecentPosts/AboutBlock）、`ui/`（shadcn）、`icons/`
 - `src/i18n/` — 中英双语：`LanguageContext.tsx`（Provider + `useLang` / `useLangPath`）、`paths.ts`（地址与语言的互转）、`dictionaries.ts`（`Dict` 接口约束）
 - `src/content/` — 文章源文件，一篇一个 MDX，文件名 `<name>.<lang>.mdx`（写法见 [CONTENT.md](CONTENT.md)）
 - `public/` — 文章图片等不经 bundler 的静态文件，`scripts/copy-assets.ts` 原样复制到 `dist/`（`bun build` 只输出 import 进来的资源）
