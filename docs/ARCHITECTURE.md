@@ -26,6 +26,7 @@
 - `src/components/` — `layout/`（Header/Footer/Layout）、`blog/`（文章行 `PostRow`/列表/正文/目录/作者卡/相关文章/进度条）、`home/`（Hero/RecentPosts/AboutBlock）、`ui/`（shadcn）、`icons/`
 - `src/i18n/` — 中英双语：`LanguageContext.tsx`（Provider + `useLang`）、`dictionaries.ts`（`Dict` 接口约束）
 - `src/content/` — 文章源文件，一篇一个 MDX，文件名 `<name>.<lang>.mdx`（写法见 [CONTENT.md](CONTENT.md)）
+- `public/` — 文章图片等不经 bundler 的静态文件，`scripts/copy-assets.ts` 原样复制到 `dist/`（`bun build` 只输出 import 进来的资源）
 - `src/generated/posts.ts` — 自动生成的核心数据文件，构建期产物
 - `src/generated/projects.ts` — 自动生成的 pinned 仓库列表（`scripts/fetch-projects.ts`），构建期产物
 - `src/lib/api.ts` — 评论 API 的 base URL、bearer token 读写和 `apiJson` 封装

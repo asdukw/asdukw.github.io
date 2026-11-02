@@ -33,6 +33,7 @@ CI 会跑 `git diff --exit-code src/generated/posts.ts`，生成文件和 MDX �
 
 - 支持 Markdown + GFM（表格、删除线、任务列表）。
 - **不支持自定义 JSX 组件**：站点渲染的是静态 HTML，没有东西可以 hydrate。
+- **图片**放 `public/images/<name>.png`，正文用根绝对路径引用：`![说明](/images/<name>.png)`。`public/` 由 `scripts/copy-assets.ts` 原样复制进 `dist/`（Bun 的 bundler 只处理 import 进来的资源，Markdown 里写的 `<img src>` 不走它），开发服务器在 `src/index.ts` 里为 `/images/*` 单开了静态路由。
 - 目录（TOC）只收集 h2/h3，由 `scripts/mdx.ts` 在 rehype-slug 之后抽取。
 - 文章顺序由 `scripts/build-content.ts` 统一排序（日期倒序，其次 id 倒序），不要依赖文件名顺序。
 
