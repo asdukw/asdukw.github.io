@@ -27,12 +27,15 @@ import { GithubIcon } from "@/components/icons/GithubIcon";
 const NAV = [
 	{ to: "/", key: "home", end: true },
 	{ to: "/post", key: "posts", end: false },
+	{ to: "/projects", key: "projects", end: false },
 	{ to: "/about", key: "about", end: false },
 ] as const;
 
 function navClass(isActive: boolean) {
-	return `rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-		isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+	return `relative rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+		isActive
+			? "text-foreground after:absolute after:inset-x-3 after:bottom-0.5 after:h-0.5 after:rounded-full after:bg-brand after:content-['']"
+			: "text-muted-foreground hover:text-foreground"
 	}`;
 }
 
