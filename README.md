@@ -105,4 +105,4 @@ GitHub Actions 的 [`deploy.yml`](.github/workflows/deploy.yml) 在 `master` 上
 
 ## 更多
 
-标了 ⚠️ 的那种坑都在 [AGENTS.md](AGENTS.md)：为什么构建必须带 `--public-path=/`、为什么不能生成 `dist/404.html`、两个 `index.html`、两个 lockfile、favicon 怎么来的等。
+为什么构建必须带 `--public-path=/`、为什么不能生成 `dist/404.html` 见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)；文件职责与约定见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。Agent 入口是 [AGENTS.md](AGENTS.md)。
