@@ -31,7 +31,7 @@
 
 - 路由用 `BrowserRouter`，干净 URL（无 `#`）；文章地址是 `/post/{id}`。SPA fallback 与构建参数见 [DEPLOYMENT.md](DEPLOYMENT.md)。
 - 界面文案走 `src/i18n/dictionaries.ts`，类型由 `Dict` 接口约束；新增文案要同时补 `zh` / `en`。
-- 文章语言由 frontmatter 的 `lang` 决定，`PostDetailPage` 用 `getPostTranslations` 找另一语言版本。
+- 文章语言由 frontmatter 的 `lang` 决定。英文版本是可选的：`getPosts` / `getPost` 按 `id` 只留一份，优先界面语言，缺英文正文时回退 `FALLBACK_LANG`（`zh`），所以 en 界面在只有中文正文时仍正常显示中文原文。`PostDetailPage` 用 `getPostTranslations` 找另一语言版本，比较基准是正文语言而非界面语言。
 
 ## 约定
 

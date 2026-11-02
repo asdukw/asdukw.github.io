@@ -19,7 +19,7 @@ function PrevNext({
 	post: Post;
 	posts: Post[];
 }) {
-	const index = posts.findIndex((p) => p.key === post.key);
+	const index = posts.findIndex((p) => p.id === post.id);
 	const prev = posts[index - 1];
 	const next = posts[index + 1];
 
@@ -79,7 +79,11 @@ export function PostDetailPage() {
 		);
 	}
 
-	const other = getPostTranslations(post.id).find((item) => item.lang !== lang);
+	// 按正文语言比较：界面语言是 en 但回退到中文原文时，不应再提示“还有另一
+	// 个语言版本”。
+	const other = getPostTranslations(post.id).find(
+		(item) => item.lang !== post.lang,
+	);
 
 	return (
 		<div>
