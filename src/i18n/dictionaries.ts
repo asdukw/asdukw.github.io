@@ -13,7 +13,6 @@ export interface Dict {
 	};
 	home: {
 		greeting: string;
-		subtitle: string;
 		viewAll: string;
 		lastUpdated: string;
 	};
@@ -66,7 +65,6 @@ export interface Dict {
 	about: {
 		introTitle: string;
 		intro1: string;
-		intro2: string;
 		contactTitle: string;
 		projectsTitle: string;
 		projectsDescription: string;
@@ -97,7 +95,6 @@ export const zh: Dict = {
 	},
 	home: {
 		greeting: "你好，我是",
-		subtitle: "在这里记录代码、阅读与生活的点滴。",
 		viewAll: "查看全部",
 		lastUpdated: "最近更新",
 	},
@@ -150,7 +147,6 @@ export const zh: Dict = {
 	about: {
 		introTitle: "关于我",
 		intro1: "你好，我是 asdukw，一名软件工程师。",
-		intro2: "白天写代码，晚上写文字。这里记录我的技术与生活。",
 		contactTitle: "联系方式",
 		projectsTitle: "项目",
 		projectsDescription: "我在业余时间做的一些东西。",
@@ -181,7 +177,6 @@ export const en: Dict = {
 	},
 	home: {
 		greeting: "Hi, I'm",
-		subtitle: "Writing down code, reading, and the small things in life.",
 		viewAll: "View all",
 		lastUpdated: "Last updated",
 	},
@@ -235,8 +230,6 @@ export const en: Dict = {
 	about: {
 		introTitle: "About me",
 		intro1: "Hi, I'm asdukw, a software engineer.",
-		intro2:
-			"I write code by day and words by night. This site holds my notes on code and life.",
 		contactTitle: "Contact",
 		projectsTitle: "Projects",
 		projectsDescription: "A few things I've built in my spare time.",

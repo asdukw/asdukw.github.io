@@ -29,9 +29,6 @@ export function Hero() {
 						{site.name}
 						<span className="text-brand">.</span>
 					</h1>
-					<p className="mt-3 max-w-md text-sm leading-relaxed text-muted-foreground sm:text-base">
-						{t.home.subtitle}
-					</p>
 				</div>
 
 				<div className="flex flex-wrap items-center gap-2">

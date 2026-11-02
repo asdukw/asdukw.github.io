@@ -32,8 +32,6 @@ export function About() {
 
 			<p className="mt-4 text-sm leading-relaxed text-muted-foreground">
 				{t.about.intro1}
-				<br />
-				{t.about.intro2}
 			</p>
 
 			<Separator className="my-8" />

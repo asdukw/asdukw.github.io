@@ -1,6 +1,6 @@
 import { Hero } from "@/components/home/Hero";
 import { RecentPosts } from "@/components/home/RecentPosts";
-import { AboutBlock } from "@/components/home/AboutBlock";
+import { ContactBlock } from "@/components/home/ContactBlock";
 import { usePageTitle } from "@/hooks/usePageTitle";
 
 export function Home() {
@@ -9,7 +9,7 @@ export function Home() {
 		<div className="space-y-14">
 			<Hero />
 			<RecentPosts />
-			<AboutBlock />
+			<ContactBlock />
 		</div>
 	);
 }
