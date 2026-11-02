@@ -25,15 +25,21 @@ export function Projects() {
 				{projects.map((project) => (
 					<Card
 						key={project.name}
-						className={`flex h-full flex-col transition-colors hover:border-border ${
-							project.featured ? "sm:col-span-2" : ""
+						className={`flex h-full flex-col transition-colors hover:border-brand/40 ${
+							project.featured
+								? "border-brand/30 sm:col-span-2"
+								: ""
 						}`}
 					>
 						<CardHeader className="pb-2">
 							<div className="flex items-start justify-between gap-2">
 								<div>
 									<div className="flex items-center gap-2">
-										<CardTitle className="text-lg">{project.name}</CardTitle>
+										<CardTitle
+											className={project.featured ? "text-xl" : "text-lg"}
+										>
+											{project.name}
+										</CardTitle>
 										<span className="text-xs text-muted-foreground">
 											{project.year}
 										</span>

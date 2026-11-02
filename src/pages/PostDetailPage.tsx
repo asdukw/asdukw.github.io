@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { Link, useParams } from "react-router";
 import { ArrowLeft, ArrowRight, Clock } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
@@ -6,19 +6,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PostContent } from "@/components/blog/PostContent";
 import { TOC } from "@/components/blog/TOC";
+import { MobileToc } from "@/components/blog/MobileToc";
+import { AuthorCard } from "@/components/blog/AuthorCard";
+import { RelatedPosts } from "@/components/blog/RelatedPosts";
+import { ReadingProgress } from "@/components/blog/ReadingProgress";
 import { CommentsSection } from "@/components/blog/CommentsSection";
 import { useLang } from "@/i18n/LanguageContext";
 import { getPost, getPostTranslations, getPosts, type Post } from "@/lib/posts";
 import { formatDate } from "@/lib/format";
 import { usePageTitle } from "@/hooks/usePageTitle";
 
-function PrevNext({
-	post,
-	posts,
-}: {
-	post: Post;
-	posts: Post[];
-}) {
+function PrevNext({ post, posts }: { post: Post; posts: Post[] }) {
+	const { t } = useLang();
 	const index = posts.findIndex((p) => p.id === post.id);
 	const prev = posts[index - 1];
 	const next = posts[index + 1];
@@ -32,8 +31,9 @@ function PrevNext({
 				>
 					<div className="flex items-center gap-1 text-xs text-muted-foreground">
 						<ArrowLeft className="h-3 w-3" />
+						{t.post.previous}
 					</div>
-					<div className="mt-1 line-clamp-1 text-sm font-medium group-hover:text-foreground">
+					<div className="mt-1 line-clamp-1 text-sm font-medium transition-colors group-hover:text-brand">
 						{prev.title}
 					</div>
 				</Link>
@@ -46,9 +46,10 @@ function PrevNext({
 					className="group rounded-lg border border-border/60 p-4 text-right transition-colors hover:border-border"
 				>
 					<div className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
+						{t.post.next}
 						<ArrowRight className="h-3 w-3" />
 					</div>
-					<div className="mt-1 line-clamp-1 text-sm font-medium group-hover:text-foreground">
+					<div className="mt-1 line-clamp-1 text-sm font-medium transition-colors group-hover:text-brand">
 						{next.title}
 					</div>
 				</Link>
@@ -62,6 +63,7 @@ function PrevNext({
 export function PostDetailPage() {
 	const { id } = useParams();
 	const { lang, t, setLang } = useLang();
+	const articleRef = useRef<HTMLElement>(null);
 	const posts = useMemo(() => getPosts(lang), [lang]);
 	const postId = Number(id);
 	const post = Number.isSafeInteger(postId) ? getPost(postId, lang) : undefined;
@@ -87,6 +89,8 @@ export function PostDetailPage() {
 
 	return (
 		<div>
+			<ReadingProgress target={articleRef} />
+
 			<Link
 				to="/post"
 				className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -96,7 +100,7 @@ export function PostDetailPage() {
 			</Link>
 
 			<div className="mt-6 grid gap-10 lg:grid-cols-[minmax(0,1fr)_220px]">
-				<article className="min-w-0">
+				<article className="min-w-0" ref={articleRef}>
 					<header>
 						<div className="flex items-start justify-between gap-4">
 							<h1 className="text-2xl font-bold leading-snug tracking-tight sm:text-3xl">
@@ -133,6 +137,8 @@ export function PostDetailPage() {
 
 					<Separator className="my-6" />
 
+					<MobileToc toc={post.toc} />
+
 					<PostContent html={post.html} />
 
 					{other && (
@@ -151,8 +157,11 @@ export function PostDetailPage() {
 					)}
 
 					<Separator className="my-6" />
+					<AuthorCard />
+					<Separator className="my-6" />
 					<CommentsSection postId={post.id} />
 					<Separator className="my-6" />
+					<RelatedPosts post={post} />
 					<PrevNext post={post} posts={posts} />
 				</article>
 

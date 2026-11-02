@@ -32,6 +32,8 @@ export interface Dict {
 		previous: string;
 		next: string;
 		backToCategory: string;
+		contents: string;
+		related: string;
 	};
 	comments: {
 		title: string;
@@ -111,6 +113,8 @@ export const zh: Dict = {
 		previous: "上一篇",
 		next: "下一篇",
 		backToCategory: "返回列表",
+		contents: "目录",
+		related: "相关文章",
 	},
 	comments: {
 		title: "评论",
@@ -190,6 +194,8 @@ export const en: Dict = {
 		previous: "Previous",
 		next: "Next",
 		backToCategory: "Back to list",
+		contents: "Contents",
+		related: "Related posts",
 	},
 	comments: {
 		title: "Comments",
