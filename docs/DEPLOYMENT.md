@@ -18,7 +18,7 @@ GitHub Actions 只有 `.github/workflows/deploy.yml`：在 `master` 上按前端
 ## 构建参数
 
 - **构建必须带 `--public-path=/`**。`bun build` 默认把 `index.html` 里的资源写成相对路径（`./index-xxx.js`），在 `/post/1` 这种深层链接上刷新时浏览器会解析成 `/post/index-xxx.js`；该路径没有静态文件，Pages 的 SPA fallback 就把 `index.html` 当 JS 返回（200 + `text/html`），浏览器报 `SyntaxError`、应用白屏。删掉这个参数会让所有深层链接的刷新挂掉。
-- 构建顺序（`package.json` 的 `build`）：`build:content` → Tailwind CLI 编译 CSS → `bun build` → `copy-favicon.ts` → `copy-404.ts`。
+- 构建顺序（`package.json` 的 `build`）：`build:content` → Tailwind CLI 编译 CSS → `fetch-icon.ts`（抓 GitHub 头像到 `src/icon.png`）→ `bun build` → `copy-404.ts`。
 
 ## SPA fallback
 

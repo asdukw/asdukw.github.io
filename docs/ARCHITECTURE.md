@@ -10,7 +10,7 @@
 
 ## 文件职责
 
-- `src/index.ts` — Bun 静态服务器：favicon、SPA shell 和开发 HMR；不包含业务 API 或 OAuth 密钥
+- `src/index.ts` — Bun 静态服务器：SPA shell 和开发 HMR；不包含业务 API 或 OAuth 密钥
 - `src/index.html` — HTML shell，加载 `frontend.tsx`（根目录的 `index.html` 是过时占位文件）
 - `src/frontend.tsx` — React 入口，挂载 `<App />`；HMR 用 `import.meta.hot.data` 模式
 - `src/App.tsx` — 根组件：`BrowserRouter` 路由 + `LanguageProvider` + `TooltipProvider`
@@ -39,4 +39,4 @@
 - **两个 lockfile**：`bun.lock` 是权威文件；`package-lock.json` 已过时，忽略它。
 - `worker/` 有独立的 `tsconfig.json`（用 `@cloudflare/workers-types`），根配置 exclude 掉了它，两边类型检查分开跑。
 - `lucide-react` v1 已移除 `Github` 等品牌图标，用 `src/components/icons/GithubIcon.tsx` 内联 SVG。
-- favicon 由 ImageMagick 从头像生成：`magick src/assets/avatar.jpg -resize 64x64 -define icon:auto-resize=16,32,48,64 src/favicon.ico`；`scripts/copy-favicon.ts` 在构建时复制 `dist/favicon.ico`，`src/index.ts` 内有 dev/static 路由。
+- 标签页图标跟随 GitHub 头像：`scripts/fetch-icon.ts` 在构建时抓 `site.avatar` 写回 `src/icon.png`（必须提交到 git，抓取失败时保留现状）；`bun build` 再把它打包成 `dist/` 里带 hash 的资源。GitHub 按上传时的原始格式返回字节（本账号是 JPEG，虽然 URL 以 `.png` 结尾），所以 `src/index.html` 的 `<link rel="icon">` 不写 `type`，由浏览器嗅探。
