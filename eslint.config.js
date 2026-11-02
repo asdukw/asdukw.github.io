@@ -5,7 +5,7 @@ import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 
 export default tseslint.config(
-  { ignores: ["dist/**", "src/styles.css", "worker/.wrangler/**"] },
+  { ignores: ["dist/**", "src/styles.css", "worker/.wrangler/**", ".agents/**"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
