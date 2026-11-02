@@ -8,6 +8,7 @@ export interface Dict {
 		backToTop: string;
 		copy: string;
 		copied: string;
+		visit: string;
 	};
 	home: {
 		greeting: string;
@@ -66,6 +67,7 @@ export interface Dict {
 		intro1: string;
 		intro2: string;
 		contactTitle: string;
+		projectsDescription: string;
 	};
 	auth: {
 		signIn: string;
@@ -89,6 +91,7 @@ export const zh: Dict = {
 		backToTop: "回到顶部",
 		copy: "复制",
 		copied: "已复制",
+		visit: "查看项目",
 	},
 	home: {
 		greeting: "你好，我是",
@@ -147,6 +150,7 @@ export const zh: Dict = {
 		intro1: "你好，我是 asdukw，一名软件工程师。",
 		intro2: "白天写代码，晚上写文字。这里记录我的技术与生活。",
 		contactTitle: "联系方式",
+		projectsDescription: "我在业余时间做的一些东西。",
 	},
 	auth: {
 		signIn: "登录",
@@ -170,6 +174,7 @@ export const en: Dict = {
 		backToTop: "Back to top",
 		copy: "Copy",
 		copied: "Copied",
+		visit: "Visit",
 	},
 	home: {
 		greeting: "Hi, I'm",
@@ -230,6 +235,7 @@ export const en: Dict = {
 		intro2:
 			"I write code by day and words by night. This site holds my notes on code and life.",
 		contactTitle: "Contact",
+		projectsDescription: "A few things I've built in my spare time.",
 	},
 	auth: {
 		signIn: "Sign in",

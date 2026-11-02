@@ -27,7 +27,6 @@ import { GithubIcon } from "@/components/icons/GithubIcon";
 const NAV = [
 	{ to: "/", key: "home", end: true },
 	{ to: "/post", key: "posts", end: false },
-	{ to: "/projects", key: "projects", end: false },
 	{ to: "/about", key: "about", end: false },
 ] as const;
 

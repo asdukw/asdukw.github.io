@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import "./styles.css";
 import { ThemeProvider } from "@/lib/ThemeContext";
 import { AuthProvider } from "@/lib/AuthContext";
@@ -8,7 +8,6 @@ import { Layout } from "@/components/layout/Layout";
 import { Home } from "@/pages/Home";
 import { PostListPage } from "@/pages/PostListPage";
 import { PostDetailPage } from "@/pages/PostDetailPage";
-import { Projects } from "@/pages/Projects";
 import { About } from "@/pages/About";
 import { NotFound } from "@/pages/NotFound";
 
@@ -24,7 +23,11 @@ export function App() {
 									<Route index element={<Home />} />
 									<Route path="post" element={<PostListPage />} />
 									<Route path="post/:id" element={<PostDetailPage />} />
-									<Route path="projects" element={<Projects />} />
+									{/* 项目已并成「关于」页的子章节，旧地址不退化成 404。 */}
+									<Route
+										path="projects"
+										element={<Navigate to="/about" replace />}
+									/>
 									<Route path="about" element={<About />} />
 									<Route path="*" element={<NotFound />} />
 								</Route>

@@ -1,34 +1,28 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ArrowUpRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { GithubIcon } from "@/components/icons/GithubIcon";
 import { useLang } from "@/i18n/LanguageContext";
 import { projects } from "@/lib/projects";
-import { usePageTitle } from "@/hooks/usePageTitle";
-import { ArrowUpRight } from "lucide-react";
 
-export function Projects() {
+// 项目是「关于」页的一个子章节，不再单独占一个路由。旧地址 /projects 在
+// App.tsx 里重定向到 /about。
+export function ProjectsSection() {
 	const { lang, t } = useLang();
-	usePageTitle(t.nav.projects);
 
 	return (
-		<div>
-			<header className="mb-6">
-				<h1 className="text-3xl font-bold tracking-tight">{t.nav.projects}</h1>
-				<p className="mt-2 text-sm text-muted-foreground">
-					{lang === "zh"
-						? "我在业余时间做的一些东西。"
-						: "A few things I've built in my spare time."}
-				</p>
-			</header>
+		<section>
+			<h2 className="text-sm font-semibold">{t.nav.projects}</h2>
+			<p className="mt-1 text-sm text-muted-foreground">
+				{t.about.projectsDescription}
+			</p>
 
-			<div className="grid gap-4 sm:grid-cols-2">
+			<div className="mt-4 grid gap-4 sm:grid-cols-2">
 				{projects.map((project) => (
 					<Card
 						key={project.name}
 						className={`flex h-full flex-col transition-colors hover:border-brand/40 ${
-							project.featured
-								? "border-brand/30 sm:col-span-2"
-								: ""
+							project.featured ? "border-brand/30 sm:col-span-2" : ""
 						}`}
 					>
 						<CardHeader className="pb-2">
@@ -40,7 +34,7 @@ export function Projects() {
 										>
 											{project.name}
 										</CardTitle>
-										<span className="text-xs text-muted-foreground">
+										<span className="text-xs text-muted-foreground tabular-nums">
 											{project.year}
 										</span>
 									</div>
@@ -76,9 +70,9 @@ export function Projects() {
 										href={project.url}
 										target="_blank"
 										rel="noopener noreferrer"
-										className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+										className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-brand"
 									>
-										{lang === "zh" ? "查看项目" : "Visit"}
+										{t.common.visit}
 										<ArrowUpRight className="h-3 w-3" />
 									</a>
 								)}
@@ -87,6 +81,6 @@ export function Projects() {
 					</Card>
 				))}
 			</div>
-		</div>
+		</section>
 	);
 }

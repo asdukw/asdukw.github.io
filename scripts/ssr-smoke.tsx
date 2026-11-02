@@ -18,7 +18,6 @@ import { Layout } from "@/components/layout/Layout";
 import { Home } from "@/pages/Home";
 import { PostListPage } from "@/pages/PostListPage";
 import { PostDetailPage } from "@/pages/PostDetailPage";
-import { Projects } from "@/pages/Projects";
 import { About } from "@/pages/About";
 import { NotFound } from "@/pages/NotFound";
 import { getPosts } from "@/lib/posts";
@@ -30,7 +29,6 @@ function render(path: string): string {
 				<Route index element={<Home />} />
 				<Route path="post" element={<PostListPage />} />
 				<Route path="post/:id" element={<PostDetailPage />} />
-				<Route path="projects" element={<Projects />} />
 				<Route path="about" element={<About />} />
 				<Route path="*" element={<NotFound />} />
 			</Route>,
@@ -59,7 +57,7 @@ function check(condition: boolean, message: string): void {
 	console.error(`✗ ${message}`);
 }
 
-for (const path of ["/", "/post", "/post/1", "/projects", "/about", "/does-not-exist"]) {
+for (const path of ["/", "/post", "/post/1", "/about", "/does-not-exist"]) {
 	const html = render(path);
 	check(html.length > 0, `${path} rendered nothing`);
 	console.log(`${path}  →  ${html.length} chars`);

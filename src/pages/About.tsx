@@ -2,6 +2,7 @@ import { Mail } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { GithubIcon } from "@/components/icons/GithubIcon";
+import { ProjectsSection } from "@/components/about/ProjectsSection";
 import { useLang } from "@/i18n/LanguageContext";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { site } from "@/lib/site";
@@ -34,6 +35,10 @@ export function About() {
 				<br />
 				{t.about.intro2}
 			</p>
+
+			<Separator className="my-8" />
+
+			<ProjectsSection />
 
 			<Separator className="my-8" />
 
