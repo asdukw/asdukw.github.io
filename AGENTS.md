@@ -12,12 +12,12 @@ Bun（不是 Node.js）+ React 19 静态站。文章是仓库里的 MDX，构建
 bun run build:content && bun run typecheck && bun run typecheck:worker && bun run lint && bun run smoke && bun run build
 ```
 
-`src/generated/posts.ts` 与 `src/styles.css` 是自动生成但必须提交的文件；CI 会检查 `posts.ts` 是否有未提交的漂移。
+`src/generated/posts.ts`、`src/generated/projects.ts` 与 `src/styles.css` 是自动生成但必须提交的文件；CI 会检查两个 generated 文件是否有未提交的漂移。
 
 ## 代码地图
 
 - `src/index.html` 是真正的 app shell；根目录 `index.html` 是过时占位。
-- 页面只通过 `src/lib/posts.ts` 取文章，不直接 import `@/generated/posts`。
+- 页面只通过 `src/lib/posts.ts` / `src/lib/projects.ts` 取数据，不直接 import `@/generated/*`。
 - `@/*` → `./src/*`；`worker/` 有独立 `tsconfig.json`，两边类型检查分开跑。
 - `BUN_PUBLIC_*` 会进浏览器产物，只放公开值；GitHub client secret 只在 Worker secret。
 

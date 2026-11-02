@@ -8,6 +8,14 @@
 - `scripts/build-content.ts`：遍历 `src/content/` 并写出 `src/generated/posts.ts`。
 - `src/lib/posts.ts`：文章数据访问层（`getPosts` / `getPost` / `getPostTranslations`），直接读生成数据，没有网络请求、没有 loading 状态。
 
+项目列表是另一条独立的流水线：
+
+`GitHub GraphQL User.pinnedItems` → `scripts/fetch-projects.ts` → `src/generated/projects.ts` → `src/lib/projects.ts` → `components/about/ProjectsSection.tsx`
+
+- pinned 仓库只能通过 GraphQL 拿，REST 的 `/users/{login}/repos` 没有这个字段。所以 `fetch-projects.ts` 需要一个 token：本地读 `GH_TOKEN` / `GITHUB_TOKEN`，没有就退回 `gh auth token`；CI 里由 `deploy.yml` 注入 `${{ github.token }}`。
+- 抓取失败只打警告并保留已提交的 `projects.ts`，不阻塞构建。
+- 卡片用的是仓库 description 原文，所以这块是中英混排的；要双语就在 `src/lib/projects.ts` 里加 override。
+
 ## 文件职责
 
 - `src/index.ts` — Bun 静态服务器：SPA shell 和开发 HMR；不包含业务 API 或 OAuth 密钥
@@ -19,6 +27,7 @@
 - `src/i18n/` — 中英双语：`LanguageContext.tsx`（Provider + `useLang`）、`dictionaries.ts`（`Dict` 接口约束）
 - `src/content/` — 文章源文件，一篇一个 MDX，文件名 `<name>.<lang>.mdx`（写法见 [CONTENT.md](CONTENT.md)）
 - `src/generated/posts.ts` — 自动生成的核心数据文件，构建期产物
+- `src/generated/projects.ts` — 自动生成的 pinned 仓库列表（`scripts/fetch-projects.ts`），构建期产物
 - `src/lib/api.ts` — 评论 API 的 base URL、bearer token 读写和 `apiJson` 封装
 - `src/lib/auth.ts` / `src/lib/AuthContext.tsx` — GitHub 登录（跳转 Worker）、会话 token 管理和管理员状态
 - `src/lib/comments.ts` — 评论 API client 与类型

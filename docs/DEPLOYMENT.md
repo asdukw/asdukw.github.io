@@ -6,7 +6,7 @@
 
 GitHub Actions 只有 `.github/workflows/deploy.yml`：在 `master` 上按前端 / Worker 路径变化触发，也支持手动触发。两个 job：
 
-- `deploy-pages`：`build:content` → 检查 `src/generated/posts.ts` 没有未提交的漂移（`git diff --exit-code`）→ `typecheck` → `typecheck:worker` → `lint` → `smoke` → `build` → `wrangler pages deploy`
+- `deploy-pages`：`build:content` → 检查 `src/generated/posts.ts` 没有未提交的漂移（`git diff --exit-code`）→ `fetch:projects` → 检查 `src/generated/projects.ts` 没有漂移 → `typecheck` → `typecheck:worker` → `lint` → `smoke` → `build` → `wrangler pages deploy`
 - `deploy-worker`：`wrangler deploy --config worker/wrangler.toml`（Worker 只在 `worker/**` 等路径变化时才有实际改动，但两个 job 都会跑）
 
 两个 job 都用 `oven-sh/setup-bun@v2` 和 `bun install --frozen-lockfile`。
