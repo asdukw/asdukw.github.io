@@ -15,7 +15,7 @@
 - `src/frontend.tsx` — React 入口，挂载 `<App />`；HMR 用 `import.meta.hot.data` 模式
 - `src/App.tsx` — 根组件：`BrowserRouter` 路由 + `LanguageProvider` + `TooltipProvider`
 - `src/pages/` — 每个路由页面对应一个文件（Home / PostListPage / PostDetailPage / Projects / About / NotFound）
-- `src/components/` — `layout/`（Header/Footer/Layout）、`blog/`（文章卡片/列表/TOC/正文）、`home/`、`ui/`（shadcn）、`icons/`
+- `src/components/` — `layout/`（Header/Footer/Layout）、`blog/`（文章行 `PostRow`/列表/正文/目录/作者卡/相关文章/进度条）、`home/`（Hero/RecentPosts/AboutBlock）、`ui/`（shadcn）、`icons/`
 - `src/i18n/` — 中英双语：`LanguageContext.tsx`（Provider + `useLang`）、`dictionaries.ts`（`Dict` 接口约束）
 - `src/content/` — 文章源文件，一篇一个 MDX，文件名 `<name>.<lang>.mdx`（写法见 [CONTENT.md](CONTENT.md)）
 - `src/generated/posts.ts` — 自动生成的核心数据文件，构建期产物
