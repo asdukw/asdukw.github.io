@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { ArrowRight } from "lucide-react";
-import { useLang } from "@/i18n/LanguageContext";
+import { useLang, useLangPath } from "@/i18n/LanguageContext";
 import { getPosts, POST_INFO } from "@/lib/posts";
 import { PostRow } from "@/components/blog/PostRow";
 
@@ -10,6 +10,7 @@ export function RecentPosts({
 	limit?: number;
 }) {
 	const { lang, t } = useLang();
+	const p = useLangPath();
 	const posts = getPosts(lang, limit);
 
 	return (
@@ -19,7 +20,7 @@ export function RecentPosts({
 					{POST_INFO.name[lang]}
 				</h2>
 				<Link
-					to="/post"
+					to={p("/post")}
 					className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
 				>
 					{t.home.viewAll}

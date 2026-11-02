@@ -3,6 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--head:start-->
+    <!-- 两个注释之间的元信息是给「没被预渲染到的路径」（dev server、SPA fallback）
+         用的通用版本；构建期 scripts/prerender.tsx 会把这一段整段换成该页自己的。
+         注释本身就是注入锚点，不要删、不要改字。 -->
     <meta
       name="description"
       content="asdukw 的个人网站：随笔与技术博客。记录代码、阅读与生活。"
@@ -19,6 +23,7 @@
          扩展名和实际格式可能不一致，交给浏览器嗅探。文件由 scripts/fetch-icon.ts 生成。 -->
     <link rel="icon" href="./icon.png" />
     <title>asdukw · 随笔与技术博客</title>
+    <!--head:end-->
     <script>
       (function () {
         try {

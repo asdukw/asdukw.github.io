@@ -2,12 +2,13 @@ import { Link } from "react-router";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { GithubIcon } from "@/components/icons/GithubIcon";
-import { useLang } from "@/i18n/LanguageContext";
+import { useLang, useLangPath } from "@/i18n/LanguageContext";
 import { getPosts } from "@/lib/posts";
 import { site } from "@/lib/site";
 
 export function Hero() {
 	const { lang, t } = useLang();
+	const p = useLangPath();
 	const latest = getPosts(lang, 1)[0];
 
 	return (
@@ -33,7 +34,7 @@ export function Hero() {
 
 				<div className="flex flex-wrap items-center gap-2">
 					<Button asChild size="sm">
-						<Link to="/post">{t.nav.posts}</Link>
+						<Link to={p("/post")}>{t.nav.posts}</Link>
 					</Button>
 					<Button asChild variant="ghost" size="icon-sm" aria-label="GitHub">
 						<a href={site.github} target="_blank" rel="noopener noreferrer">

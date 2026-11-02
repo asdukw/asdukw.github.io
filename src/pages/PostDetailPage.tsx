@@ -11,13 +11,14 @@ import { AuthorCard } from "@/components/blog/AuthorCard";
 import { RelatedPosts } from "@/components/blog/RelatedPosts";
 import { ReadingProgress } from "@/components/blog/ReadingProgress";
 import { CommentsSection } from "@/components/blog/CommentsSection";
-import { useLang } from "@/i18n/LanguageContext";
+import { useLang, useLangPath } from "@/i18n/LanguageContext";
 import { getPost, getPostTranslations, getPosts, type Post } from "@/lib/posts";
 import { formatDate } from "@/lib/format";
 import { usePageTitle } from "@/hooks/usePageTitle";
 
 function PrevNext({ post, posts }: { post: Post; posts: Post[] }) {
 	const { t } = useLang();
+	const p = useLangPath();
 	const index = posts.findIndex((p) => p.id === post.id);
 	const prev = posts[index - 1];
 	const next = posts[index + 1];
@@ -26,7 +27,7 @@ function PrevNext({ post, posts }: { post: Post; posts: Post[] }) {
 		<div className="mt-10 grid gap-3 sm:grid-cols-2">
 			{prev ? (
 				<Link
-					to={`/post/${prev.id}`}
+					to={p(`/post/${prev.id}`)}
 					className="group rounded-lg border border-border/60 p-4 transition-colors hover:border-border"
 				>
 					<div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -42,7 +43,7 @@ function PrevNext({ post, posts }: { post: Post; posts: Post[] }) {
 			)}
 			{next ? (
 				<Link
-					to={`/post/${next.id}`}
+					to={p(`/post/${next.id}`)}
 					className="group rounded-lg border border-border/60 p-4 text-right transition-colors hover:border-border"
 				>
 					<div className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
@@ -63,6 +64,7 @@ function PrevNext({ post, posts }: { post: Post; posts: Post[] }) {
 export function PostDetailPage() {
 	const { id } = useParams();
 	const { lang, t, setLang } = useLang();
+	const p = useLangPath();
 	const articleRef = useRef<HTMLElement>(null);
 	const posts = useMemo(() => getPosts(lang), [lang]);
 	const postId = Number(id);
@@ -75,7 +77,7 @@ export function PostDetailPage() {
 				<p className="text-2xl font-semibold">404</p>
 				<p className="mt-2 text-sm text-muted-foreground">{t.list.empty}</p>
 				<Button asChild variant="outline" size="sm" className="mt-6">
-					<Link to="/">{t.nav.home}</Link>
+					<Link to={p("/")}>{t.nav.home}</Link>
 				</Button>
 			</div>
 		);
@@ -92,7 +94,7 @@ export function PostDetailPage() {
 			<ReadingProgress target={articleRef} />
 
 			<Link
-				to="/post"
+				to={p("/post")}
 				className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
 			>
 				<ArrowLeft className="h-4 w-4" />
@@ -126,7 +128,7 @@ export function PostDetailPage() {
 										className="font-normal"
 										asChild
 									>
-										<Link to={`/post?tag=${encodeURIComponent(tag)}`}>
+										<Link to={p(`/post?tag=${encodeURIComponent(tag)}`)}>
 											{tag}
 										</Link>
 									</Badge>

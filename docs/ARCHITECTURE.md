@@ -21,10 +21,11 @@
 - `src/index.ts` — Bun 静态服务器：SPA shell 和开发 HMR；不包含业务 API 或 OAuth 密钥
 - `src/index.html` — HTML shell，加载 `frontend.tsx`（根目录的 `index.html` 是过时占位文件）
 - `src/frontend.tsx` — React 入口，挂载 `<App />`；HMR 用 `import.meta.hot.data` 模式
-- `src/App.tsx` — 根组件：`BrowserRouter` 路由 + `LanguageProvider` + `TooltipProvider`
-- `src/pages/` — 每个路由页面对应一个文件（Home / PostListPage / PostDetailPage / Projects / About / NotFound）
+- `src/App.tsx` — 根组件：`BrowserRouter` + `LanguageProvider` + `TooltipProvider`，路由子树来自 `src/routes.tsx`
+- `src/routes.tsx` — 路由树：中文裸路径与 `/en` 子树共用同一组页面组件，`/zh/*` 归一化重定向也在这里。smoke 脚本与构建期预渲染复用这棵树
+- `src/pages/` — 每个路由页面对应一个文件（Home / PostListPage / PostDetailPage / About / NotFound）
 - `src/components/` — `layout/`（Header/Footer/Layout）、`blog/`（文章行 `PostRow`/列表/正文/目录/作者卡/相关文章/进度条）、`home/`（Hero/RecentPosts/AboutBlock）、`ui/`（shadcn）、`icons/`
-- `src/i18n/` — 中英双语：`LanguageContext.tsx`（Provider + `useLang`）、`dictionaries.ts`（`Dict` 接口约束）
+- `src/i18n/` — 中英双语：`LanguageContext.tsx`（Provider + `useLang` / `useLangPath`）、`paths.ts`（地址与语言的互转）、`dictionaries.ts`（`Dict` 接口约束）
 - `src/content/` — 文章源文件，一篇一个 MDX，文件名 `<name>.<lang>.mdx`（写法见 [CONTENT.md](CONTENT.md)）
 - `public/` — 文章图片等不经 bundler 的静态文件，`scripts/copy-assets.ts` 原样复制到 `dist/`（`bun build` 只输出 import 进来的资源）
 - `src/generated/posts.ts` — 自动生成的核心数据文件，构建期产物
@@ -36,12 +37,23 @@
 - `src/lib/ThemeContext.tsx` — 浅色 / 深色 / 跟随系统（见 [STYLING.md](STYLING.md)）
 - `worker/` — 评论 / 认证 Worker（见 [COMMENT-API.md](COMMENT-API.md)）
 - `src/styles.css` — 自动生成，由 Tailwind CLI 从 `src/index.css` 编译（见 [STYLING.md](STYLING.md)）
+- `scripts/prerender.tsx` — 构建期把每个公开路由渲染成扁平 `.html`（`dist/post/2.html`），注入该页专属的 `<title>` / `canonical` / `og:*` / `hreflang`
+- `scripts/build-seo.ts` — 从 `site` 和 `getPosts` 生成 `robots.txt`、`sitemap.xml`、`rss.xml`、`en/rss.xml`
+
+## 渲染与 SEO
+
+- **运行时是纯客户端渲染**：`src/frontend.tsx` 用 `createRoot().render()`，不做 hydration。预渲染出的 HTML 在 JS 加载后会被 React 清空重建，它的价值只在「爬虫和分享卡片不跑 JS 也能拿到正确元信息与正文」。改动渲染方式时（比如换成 `hydrateRoot`）要先看 `openspec` 里的 `add-seo-and-i18n-urls` 设计记录：首帧一致性会被 `ThemeProvider`、`AuthContext` 这类浏览器状态打破。
+- 预渲染与 smoke 共用 `scripts/render-route.tsx` 的同一套 Provider/路由装配，路由表在 `src/routes.tsx`；三者不要各写一份。
+- 每个页面的元信息在 `scripts/prerender.tsx` 的 `metaFor()` 里集中生成；站点根地址来自 `src/lib/site.ts` 的 `baseUrl`，默认分享图是 `site.ogImage`（文章可用 frontmatter 的 `image` 覆盖，见 [CONTENT.md](CONTENT.md)）。
+- `hreflang` 只给「中英文正文都存在」的文章配对：只有中文正文的文章在 `/en/post/{id}` 上仍是中文正文，声明 `hreflang="en"` 等于骗搜索引擎。
 
 ## 路由与语言
 
 - 路由用 `BrowserRouter`，干净 URL（无 `#`）；文章地址是 `/post/{id}`。SPA fallback 与构建参数见 [DEPLOYMENT.md](DEPLOYMENT.md)。
+- **界面语言由 URL 前缀决定**：无前缀是中文（`/post/2`），`/en` 前缀是英文（`/en/post/2`）。`/zh/...` 是冗余写法，重定向到去前缀的等价地址。语言**不再存进 `localStorage`**，所以同一个地址永远渲染同一份内容——这是构建期预渲染能成立的前提。
+- 站内链接一律用 `useLangPath()`（`src/i18n/LanguageContext.tsx`）构造，不要手写 `/post/...`；它按当前界面语言补前缀并保留查询串。语言切换按钮是导航（`navigate(等价地址)`），不是替换文案。
 - 界面文案走 `src/i18n/dictionaries.ts`，类型由 `Dict` 接口约束；新增文案要同时补 `zh` / `en`。
-- 文章语言由 frontmatter 的 `lang` 决定。英文版本是可选的：`getPosts` / `getPost` 按 `id` 只留一份，优先界面语言，缺英文正文时回退 `FALLBACK_LANG`（`zh`），所以 en 界面在只有中文正文时仍正常显示中文原文。`PostDetailPage` 用 `getPostTranslations` 找另一语言版本，比较基准是正文语言而非界面语言。
+- 文章语言由 frontmatter 的 `lang` 决定，与界面语言无关。英文版本是可选的：`getPosts` / `getPost` 按 `id` 只留一份，优先界面语言，缺英文正文时回退 `FALLBACK_LANG`（`zh`），所以 en 界面在只有中文正文时仍正常显示中文原文（`/en/post/2` 是英文界面 + 中文正文）。`PostDetailPage` 用 `getPostTranslations` 找另一语言版本，比较基准是正文语言而非界面语言。
 
 ## 约定
 

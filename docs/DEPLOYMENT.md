@@ -2,6 +2,8 @@
 
 生产站点：`https://asdukw.pages.dev`（Cloudflare Pages 项目 `asdukw`，direct upload）；评论 Worker（`asdukw-api`）独立部署。
 
+站点根地址在代码里只有一处真源：`src/lib/site.ts` 的 `site.baseUrl`。`canonical`、`sitemap.xml`、`rss.xml` 都从它拼绝对地址，换域名要改这里并同步本文档。
+
 ## CI/CD
 
 GitHub Actions 只有 `.github/workflows/deploy.yml`：在 `master` 上按前端 / Worker 路径变化触发，也支持手动触发。两个 job：
@@ -18,13 +20,26 @@ GitHub Actions 只有 `.github/workflows/deploy.yml`：在 `master` 上按前端
 ## 构建参数
 
 - **构建必须带 `--public-path=/`**。`bun build` 默认把 `index.html` 里的资源写成相对路径（`./index-xxx.js`），在 `/post/1` 这种深层链接上刷新时浏览器会解析成 `/post/index-xxx.js`；该路径没有静态文件，Pages 的 SPA fallback 就把 `index.html` 当 JS 返回（200 + `text/html`），浏览器报 `SyntaxError`、应用白屏。删掉这个参数会让所有深层链接的刷新挂掉。
-- 构建顺序（`package.json` 的 `build`）：`build:content` → Tailwind CLI 编译 CSS → `fetch-icon.ts`（抓 GitHub 头像到 `src/icon.png`）→ `bun build` → `copy-404.ts`。
+- 构建顺序（`package.json` 的 `build`）：`build:content` → `fetch:projects` → Tailwind CLI 编译 CSS → `fetch-icon.ts`（抓 GitHub 头像到 `src/icon.png`）→ `bun build` → `copy-assets.ts` → `build:seo`（robots / sitemap / RSS）→ `prerender`（按路由写静态 HTML）→ `copy-404.ts`。
+- 预渲染必须在 `bun build` 之后：它拿 `dist/index.html` 当壳（里面是带 hash 的资源引用）。产出的每个页面都会被自检 `<title>` 与 `canonical` 是否写入，找不到注入锚点就直接构建失败。
 
 ## SPA fallback
 
 路由用 `BrowserRouter`（干净 URL，无 `#`）。`scripts/copy-404.ts` 生成 `dist/_redirects`（`/* /index.html 200`）做 SPA fallback，深层链接/刷新按当前 pathname 渲染对应页面。
 
 **不要**生成 `dist/404.html`——Cloudflare Pages 只有在没有顶层 `404.html` 时才启用原生 SPA 渲染。
+
+### 静态文件、`_redirects` 与尾斜杠
+
+本地 `wrangler pages dev dist`（与生产同一运行时）实测的优先级：
+
+| 请求 | 磁盘上有 | 结果 |
+| --- | --- | --- |
+| `/post/2` | `dist/post/2.html` | 200，直接返回该文件 |
+| `/post/2` | `dist/post/2/index.html` | 308 → `/post/2/` |
+| `/post` | 无 | 命中 `_redirects`，返回 `dist/index.html` 壳 |
+
+所以：**静态文件优先于 `_redirects`**，SPA fallback 只兜没有对应文件的路径；**预渲染产物要写成扁平 `.html`**（`dist/post/2.html`），写成目录式会多一次尾斜杠重定向，canonical 地址就变成 `/post/2/` 了。
 
 ## 环境变量
 

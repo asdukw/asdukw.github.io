@@ -45,6 +45,9 @@ worker/node_modules
 worker/.wrangler
 worker/.dev.vars
 
+# `wrangler pages dev dist` 会在仓库根建一份本地运行时状态
+/.wrangler/
+
 backend/.venv
 backend/.env
 backend/**/__pycache__

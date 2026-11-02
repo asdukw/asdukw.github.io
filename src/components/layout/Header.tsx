@@ -18,7 +18,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useLang } from "@/i18n/LanguageContext";
+import { useLang, useLangPath } from "@/i18n/LanguageContext";
 import { useAuth } from "@/lib/AuthContext";
 import { site } from "@/lib/site";
 import { ThemeSwitcher } from "./ThemeSwitcher";
@@ -128,13 +128,14 @@ function MobileUserButton() {
 
 export function Header() {
 	const { lang, t, toggleLang } = useLang();
+	const p = useLangPath();
 	const [open, setOpen] = useState(false);
 
 	return (
 		<header className="sticky top-0 z-40 w-full border-b border-border/60 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/70">
 			<div className="mx-auto flex h-14 max-w-4xl items-center justify-between px-4 sm:px-6">
 				<Link
-					to="/"
+					to={p("/")}
 					className="flex items-center gap-2 text-base font-semibold tracking-tight"
 				>
 					<span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-md bg-primary text-primary-foreground text-xs font-bold">
@@ -151,7 +152,7 @@ export function Header() {
 					{NAV.map((item) => (
 						<NavLink
 							key={item.to}
-							to={item.to}
+							to={p(item.to)}
 							end={item.end}
 							className={({ isActive }) => navClass(isActive)}
 						>
@@ -198,7 +199,7 @@ export function Header() {
 								{NAV.map((item) => (
 									<NavLink
 										key={item.to}
-										to={item.to}
+										to={p(item.to)}
 										end={item.end}
 										className={({ isActive }) =>
 											`rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${

@@ -17,6 +17,8 @@ export interface Post {
 	date: string;
 	tags: string[];
 	excerpt: string;
+	/** 分享图；缺省时用 `site.ogImage`。 */
+	image?: string;
 	readingTime: number;
 	html: string;
 	toc: TocItem[];
@@ -40,6 +42,7 @@ const ALL_POSTS: Post[] = POSTS.map((post) => ({
 	date: post.date,
 	tags: post.tags,
 	excerpt: post.excerpt,
+	...(post.image === undefined ? {} : { image: post.image }),
 	readingTime: post.readingTime,
 	html: post.html,
 	toc: post.toc,

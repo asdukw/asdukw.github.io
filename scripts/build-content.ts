@@ -15,6 +15,7 @@
 //   date: 2026-08-28
 //   tags: [Bun, React]
 //   excerpt: 摘要
+//   image: /images/og.png   # 可选，分享卡片用图
 //   ---
 
 import path from "node:path";
@@ -66,6 +67,7 @@ export interface GeneratedPost {
 	date: string;
 	tags: string[];
 	excerpt: string;
+	image?: string;
 	readingTime: number;
 	html: string;
 	toc: GeneratedTocItem[];

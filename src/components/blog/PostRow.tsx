@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { Badge } from "@/components/ui/badge";
-import { useLang } from "@/i18n/LanguageContext";
+import { useLang, useLangPath } from "@/i18n/LanguageContext";
 import type { Post } from "@/lib/posts";
 
 // 列表里的一行。整行都可点：标题链接上铺一层 after 伪元素盖住这一行，标签链接
@@ -15,6 +15,7 @@ export function PostRow({
 	hideYear?: boolean;
 }) {
 	const { t } = useLang();
+	const p = useLangPath();
 
 	return (
 		<article className="group relative border-b border-border/60 py-5 transition-colors first:pt-0 last:border-b-0 hover:border-border">
@@ -30,7 +31,7 @@ export function PostRow({
 
 			<h3 className="mt-1.5 text-base font-semibold leading-snug tracking-tight">
 				<Link
-					to={`/post/${post.id}`}
+					to={p(`/post/${post.id}`)}
 					className="transition-colors after:absolute after:inset-0 after:content-[''] group-hover:text-brand"
 				>
 					{post.title}
@@ -47,7 +48,7 @@ export function PostRow({
 				<div className="relative z-10 mt-3 flex flex-wrap items-center gap-1.5">
 					{post.tags.slice(0, 4).map((tag) => (
 						<Badge key={tag} variant="secondary" className="font-normal" asChild>
-							<Link to={`/post?tag=${encodeURIComponent(tag)}`}>{tag}</Link>
+							<Link to={p(`/post?tag=${encodeURIComponent(tag)}`)}>{tag}</Link>
 						</Badge>
 					))}
 				</div>

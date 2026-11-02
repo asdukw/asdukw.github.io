@@ -32,6 +32,8 @@ export interface CompiledPost {
 	date: string;
 	tags: string[];
 	excerpt: string;
+	/** 可选分享图；不写时用 `site.ogImage`。 */
+	image?: string;
 	readingTime: number;
 	html: string;
 	toc: TocItem[];
@@ -121,6 +123,14 @@ export async function compilePost(file: string): Promise<CompiledPost> {
 	const tags = Array.isArray(data.tags)
 		? data.tags.filter((tag): tag is string => typeof tag === "string")
 		: [];
+	// 分享图是可选的，所以只校验「写了就必须是站内绝对路径」，不要求必须有。
+	const image =
+		typeof data.image === "string" && data.image.trim()
+			? data.image.trim()
+			: undefined;
+	if (image !== undefined && !image.startsWith("/")) {
+		fail(`${file}: frontmatter "image" must be a root-absolute path like /images/og.png`);
+	}
 
 	const body = parsed.content.trim();
 	if (!body) fail(`${file}: no content below the frontmatter`);
@@ -135,6 +145,7 @@ export async function compilePost(file: string): Promise<CompiledPost> {
 		date,
 		tags,
 		excerpt,
+		...(image === undefined ? {} : { image }),
 		readingTime: readingTime(body),
 		html,
 		toc,

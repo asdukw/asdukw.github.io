@@ -14,6 +14,7 @@ export interface GeneratedPost {
 	date: string;
 	tags: string[];
 	excerpt: string;
+	image?: string;
 	readingTime: number;
 	html: string;
 	toc: GeneratedTocItem[];
