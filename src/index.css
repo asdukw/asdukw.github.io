@@ -288,61 +288,168 @@ body {
   color: var(--foreground);
 }
 
+/* ---------- Code blocks ---------- */
+/* PostContent 在客户端给每个 <pre> 包一层 .code-block 和头部（语言 + 复制）。
+   没有 JS 时 <pre> 保留自己的边框和圆角，看起来仍然正常。 */
+
+.prose-article .code-block {
+  margin: 1.5em 0;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--muted);
+  overflow: hidden;
+}
+
+.prose-article .code-block pre {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0.9em 1.1em;
+}
+
+.prose-article .code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.35rem 0.45rem 0.35rem 1.1em;
+  border-bottom: 1px solid var(--border);
+}
+
+.prose-article .code-block-lang {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.prose-article .code-block-copy {
+  font-family: inherit;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid transparent;
+  border-radius: 0.25rem;
+  color: var(--muted-foreground);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    color 150ms,
+    background-color 150ms,
+    border-color 150ms;
+}
+
+.prose-article .code-block-copy:hover,
+.prose-article .code-block-copy[data-copied] {
+  color: var(--foreground);
+  border-color: var(--border);
+  background: var(--background);
+}
+
+.prose-article .code-block-copy[data-copied] {
+  color: var(--brand);
+}
+
+.prose-article .code-block-copy:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
 /* ---------- Syntax highlighting (highlight.js classes) ---------- */
+/* 一套颜色变量，light/dark 只覆盖变量，不再维护两份硬编码 hex。 */
+
+.prose-article {
+  --code-keyword: var(--brand);
+  --code-string: oklch(0.48 0.13 155);
+  --code-number: oklch(0.52 0.14 55);
+  --code-title: oklch(0.5 0.17 320);
+  --code-type: oklch(0.5 0.13 240);
+  --code-attr: oklch(0.35 0.04 265);
+  --code-deletion: oklch(0.52 0.2 25);
+  --code-comment: var(--muted-foreground);
+}
+
+.dark .prose-article {
+  --code-string: oklch(0.82 0.13 155);
+  --code-number: oklch(0.84 0.12 75);
+  --code-title: oklch(0.8 0.13 320);
+  --code-type: oklch(0.8 0.1 240);
+  --code-attr: oklch(0.88 0.03 265);
+  --code-deletion: oklch(0.72 0.17 22);
+  --code-comment: oklch(0.64 0 0);
+}
 
 .prose-article .hljs-comment,
 .prose-article .hljs-quote {
-  color: var(--muted-foreground);
+  color: var(--code-comment);
   font-style: italic;
 }
 
 .prose-article .hljs-keyword,
 .prose-article .hljs-selector-tag,
 .prose-article .hljs-literal,
-.prose-article .hljs-doctag {
-  color: #d73a49;
+.prose-article .hljs-doctag,
+.prose-article .hljs-meta .hljs-keyword {
+  color: var(--code-keyword);
 }
 
 .prose-article .hljs-string,
 .prose-article .hljs-regexp,
-.prose-article .hljs-addition {
-  color: #032f62;
-}
-
-.prose-article .hljs-title,
-.prose-article .hljs-title.function_,
-.prose-article .hljs-section {
-  color: #6f42c1;
-}
-
-.prose-article .hljs-title.class_,
-.prose-article .hljs-type,
-.prose-article .hljs-built_in {
-  color: #005cc5;
+.prose-article .hljs-addition,
+.prose-article .hljs-char.escape_ {
+  color: var(--code-string);
 }
 
 .prose-article .hljs-number,
 .prose-article .hljs-symbol,
-.prose-article .hljs-bullet {
-  color: #005cc5;
+.prose-article .hljs-bullet,
+.prose-article .hljs-variable.language_ {
+  color: var(--code-number);
+}
+
+.prose-article .hljs-title,
+.prose-article .hljs-title.function_,
+.prose-article .hljs-section,
+.prose-article .hljs-name {
+  color: var(--code-title);
+}
+
+.prose-article .hljs-title.class_,
+.prose-article .hljs-type,
+.prose-article .hljs-built_in,
+.prose-article .hljs-selector-class,
+.prose-article .hljs-selector-id {
+  color: var(--code-type);
 }
 
 .prose-article .hljs-attr,
 .prose-article .hljs-attribute,
 .prose-article .hljs-variable,
 .prose-article .hljs-template-variable,
-.prose-article .hljs-params {
-  color: #24292e;
+.prose-article .hljs-params,
+.prose-article .hljs-property,
+.prose-article .hljs-subst,
+.prose-article .hljs-selector-attr,
+.prose-article .hljs-selector-pseudo {
+  color: var(--code-attr);
 }
 
-.prose-article .hljs-function .hljs-title {
-  color: #6f42c1;
+.prose-article .hljs-tag,
+.prose-article .hljs-punctuation {
+  color: var(--code-comment);
 }
 
-.prose-article .hljs-meta,
-.prose-article .hljs-selector-id,
-.prose-article .hljs-selector-class {
-  color: #6f42c1;
+.prose-article .hljs-meta {
+  color: var(--code-number);
+}
+
+.prose-article .hljs-deletion {
+  color: var(--code-deletion);
+}
+
+.prose-article .hljs-link {
+  text-decoration: underline;
 }
 
 .prose-article .hljs-emphasis {
@@ -352,35 +459,3 @@ body {
 .prose-article .hljs-strong {
   font-weight: 600;
 }
-
-.dark .prose-article .hljs-keyword,
-  .dark .prose-article .hljs-selector-tag,
-  .dark .prose-article .hljs-literal,
-  .dark .prose-article .hljs-doctag,
-  .dark .prose-article .hljs-title,
-  .dark .prose-article .hljs-title.function_,
-  .dark .prose-article .hljs-section,
-  .dark .prose-article .hljs-meta {
-    color: #f97583;
-  }
-
-  .dark .prose-article .hljs-string,
-  .dark .prose-article .hljs-regexp,
-  .dark .prose-article .hljs-addition {
-    color: #9ecbff;
-  }
-
-  .dark .prose-article .hljs-title.class_,
-  .dark .prose-article .hljs-type,
-  .dark .prose-article .hljs-built_in,
-  .dark .prose-article .hljs-number,
-  .dark .prose-article .hljs-symbol,
-  .dark .prose-article .hljs-attr,
-  .dark .prose-article .hljs-attribute,
-  .dark .prose-article .hljs-variable,
-  .dark .prose-article .hljs-template-variable,
-  .dark .prose-article .hljs-params,
-  .dark .prose-article .hljs-selector-id,
-  .dark .prose-article .hljs-selector-class {
-    color: #79b8ff;
-  }

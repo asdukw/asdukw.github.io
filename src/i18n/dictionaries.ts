@@ -6,6 +6,8 @@ export interface Dict {
 		minRead: string;
 		posts: string;
 		backToTop: string;
+		copy: string;
+		copied: string;
 	};
 	home: {
 		greeting: string;
@@ -79,6 +81,8 @@ export const zh: Dict = {
 		minRead: "分钟阅读",
 		posts: "篇文章",
 		backToTop: "回到顶部",
+		copy: "复制",
+		copied: "已复制",
 	},
 	home: {
 		greeting: "你好，我是",
@@ -152,6 +156,8 @@ export const en: Dict = {
 		minRead: "min read",
 		posts: "posts",
 		backToTop: "Back to top",
+		copy: "Copy",
+		copied: "Copied",
 	},
 	home: {
 		greeting: "Hi, I'm",
