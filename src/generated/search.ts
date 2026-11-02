@@ -21,7 +21,7 @@ export const SECTIONS: GeneratedSection[] = [
 		"lang": "zh",
 		"anchor": "这是什么",
 		"heading": "这是什么",
-		"text": "bb-sync 是我写的命令行工具，只服务港中深。它登录 bb.cuhk.edu.cn，把课件、作业、指导（tutorial / lab）增量下载到本地，把公告存成 Markdown，再把全部课程的待办汇总成一份 due.md。 同步一次之后，下载目录是这样： ~/courses/ ├── CSC5010_人工智能/ │ ├── lectures/ │ │ ├── 01 绪论.pdf │ │ └── 02 搜索算法.pdf │ ├── assignments/hw1/ │ │ ├── hw1.pdf │ │ └── starter.zip │ ├── tutorials/tutorial01.ipynb │ └── announcements.md ├── MAT1001_微积分/ └── due.md 重复运行只下新增的文件，已经有的直接跳过，所以每天跑一遍也很快。 它只读你自己账号里本来就能看到的内容：不回传作业、不代签到、不抓成绩，也绕不过任何权限。"
+		"text": "bb-sync 是我写的命令行工具，只服务港中深。它登录 bb.cuhk.edu.cn，把课件、作业、指导（tutorial / lab）增量下载到本地，把公告存成 Markdown，再把全部课程的待办汇总成一份 due.md。 同步一次之后，下载目录是这样： ~/courses/ ├── CSC5010_人工智能/ │ ├── lectures/ │ │ ├── 01 绪论.pdf │ │ └── 02 搜索算法.pdf │ ├── assignments/hw1/ │ │ ├── hw1.pdf │ │ └── starter.zip │ ├── tutorials/tutorial01.ipynb │ └── announcements.md ├── MAT1001_微积分/ └── due.md 重复运行只下新增的文件，已经有的直接跳过，所以每天跑一遍也很快。 注意 它只读你自己账号里本来就能看到的内容：不回传作业、不代签到、不抓成绩，也绕不过任何权限。"
 	},
 	{
 		"postId": 2,
@@ -49,7 +49,7 @@ export const SECTIONS: GeneratedSection[] = [
 		"lang": "zh",
 		"anchor": "方式二pip",
 		"heading": "方式二：pip",
-		"text": "机器上已经有 Python 3.11 或更新版本的话，用 pip 也可以： pip install --user bb-sync macOS 上一般用 pip3 install --user bb-sync。装完检查三件事： 能直接敲 bb-sync 就没问题。 提示「找不到命令」，说明 Python 的脚本目录不在 PATH 里。这时把 bb-sync 换成 python -m bb_sync，例如 python -m bb_sync doctor。 不想动系统 Python 就用 pipx： pipx install bb-sync。 bb-sync doctor 检查环境，逐项告诉你哪里没准备好： bb-sync 2.2.0 — doctor [✓] Python 3.12.14 [✓] git git version 2.5x [✓] 浏览器 Chrome (C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe) [✓] 网络 https://bb.cuhk.edu.cn 可达 [✓] 凭据 未配置（首次运行会提示录入） [✓] 浏览器后端 未运行（下次同步自动启动） 刚装完时，凭据显示「未配置」、浏览器显示「未运行」，都正常。"
+		"text": "机器上已经有 Python 3.11 或更新版本的话，用 pip 也可以： pip install --user bb-sync macOS 上一般用 pip3 install --user bb-sync。装完检查三件事： 能直接敲 bb-sync 就没问题。 提示「找不到命令」，说明 Python 的脚本目录不在 PATH 里。这时把 bb-sync 换成 python -m bb_sync，例如 python -m bb_sync doctor。 不想动系统 Python 就用 pipx： pipx install bb-sync。 bb-sync doctor 检查环境，逐项告诉你哪里没准备好： bb-sync 2.2.0 — doctor [✓] Python 3.12.14 [✓] git git version 2.5x [✓] 浏览器 Chrome (C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe) [✓] 网络 https://bb.cuhk.edu.cn 可达 [✓] 凭据 未配置（首次运行会提示录入） [✓] 浏览器后端 未运行（下次同步自动启动） 注意 刚装完时，凭据显示「未配置」、浏览器显示「未运行」，都正常。"
 	},
 	{
 		"postId": 2,
@@ -70,7 +70,7 @@ export const SECTIONS: GeneratedSection[] = [
 		"lang": "zh",
 		"anchor": "常见问题",
 		"heading": "常见问题",
-		"text": "bb-sync 找不到？ 重开终端。uv 装的还可以执行 uv tool update-shell 再重开，pip 装的试 python -m bb_sync。 doctor 里网络那项没过？ Blackboard 校外也能直接访问，不需要连学校 VPN。这项报错一般是本机网络或代理的问题，例如系统代理没法正常转发 HTTPS，关掉代理或换个网络再试。只想跳过这项检查可以用 bb-sync doctor --skip-network。 登录失败？ bb-sync auth status 看凭据在不在，再用 bb-sync run --headed 重试一次。还不行的话， ~/.bb-sync/ 下会留一张失败截图和 debug_login.html，可以拿来排查，提 issue 时也可以附上。 想看着浏览器跑，或者连着跑好几条命令？ bb-sync run --headed --keep-open 会让窗口留在屏幕上，之后用 bb-sync browser status 看状态、 bb-sync browser stop 关掉。 想换账号？ bb-sync auth logout 只删钥匙串里的密码，浏览器里的登录状态还在。要彻底换，先 bb-sync browser stop，再删掉 ~/.bb-sync/.browser-profile/ 目录，然后重新 bb-sync auth login。"
+		"text": "bb-sync 找不到？ 重开终端。uv 装的还可以执行 uv tool update-shell 再重开，pip 装的试 python -m bb_sync。 doctor 里网络那项没过？ 提示 这项报错几乎都是本机代理的问题，不是工具的问题，也不需要连学校 VPN——Blackboard 校外可以直接访问。系统代理没法正常转发 HTTPS 是常见原因，关掉代理或换个网络再试；只想跳过这项检查可以用 bb-sync doctor --skip-network。 登录失败？ bb-sync auth status 看凭据在不在，再用 bb-sync run --headed 重试一次。还不行的话， ~/.bb-sync/ 下会留一张失败截图和 debug_login.html，可以拿来排查，提 issue 时也可以附上。 想看着浏览器跑，或者连着跑好几条命令？ bb-sync run --headed --keep-open 会让窗口留在屏幕上，之后用 bb-sync browser status 看状态、 bb-sync browser stop 关掉。 想换账号？ 小心 bb-sync auth logout 只删钥匙串里的密码，浏览器里的登录状态还在。要彻底换，先 bb-sync browser stop，再删掉 ~/.bb-sync/.browser-profile/ 目录，然后重新 bb-sync auth login。"
 	},
 	{
 		"postId": 2,
