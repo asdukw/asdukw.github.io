@@ -39,15 +39,18 @@
 
 ### 决策 2：在 remark（mdast）层实现，用 `data.hName` 交给 rehype
 
-插件遍历 `blockquote` 节点：若其第一个子节点是 `paragraph`，且该段落的纯文本匹配 `^\[!(TYPE)\]$`（大小写不敏感、允许首尾空白），则：
+插件先 `visit` 收集全部 `blockquote`，再统一改写（在遍历中改 `children` 会让遍历索引失效，下一个兄弟读回来是 `undefined`）。对每个块：首个子节点必须是 `paragraph`，其首个子节点必须是 `text`，且以 `^\[!(TYPE)\][ \t]*(?:\n|$)` 开头。命中后：
 
-1. 删掉这个标记段落；
-2. 给 blockquote 节点打上 `data = { hName: "div", hProperties: { className: [...] } }`；
-3. 在最前面插入一个标题段落。
+1. 从该 text 节点里切掉标记本身（标记与正文在同一个 text 节点里，中间是软换行——这是实现时实测的 AST 形状，不是「标记独占一个段落」）；
+2. 若切完该段落变空，整段移除；
+3. 给 blockquote 节点打上 `data = { hName: "div", hProperties: { className: [...] } }`；
+4. 在最前面插入标题段落。
 
 在 mdast 层做而不是 rehype 层：此时内容还是结构化节点（段落、列表、代码都是 `children`），改写容器不会碰到内容；如果先渲染成 hast 再改，就得重新解析文本和结构。
 
 `blockquote` 节点自带的 `data.hName` 会被 remark-rehype 用在输出元素上，所以不需要额外的 hast 插件。
+
+插件注册必须用 `[remarkCallout, lang]` 这种「插件 + 选项」数组形式：直接写 `remarkCallout(lang)`（已是 transformer）会被 unified 当成 attacher 无参调用，`tree` 为 `undefined`。
 
 ### 决策 3：标题作为真实文本节点插入，而不是 CSS `::before`
 
@@ -77,7 +80,9 @@
 
 ### 决策 6：配色复用现有变量体系，不引入图标
 
-五种类型各给一组 `--callout-accent` / `--callout-bg`，定义在 `.prose-article .callout-<kind>`，深色在 `.dark .prose-article .callout-<kind>` 覆盖——与 `src/index.css` 现有的代码高亮配色同一套模式。
+五种类型各给一对变量：`--callout-<kind>`（强调色）与 `--callout-<kind>-bg`（带 alpha 的底色），浅色写在一个 `.prose-article` 变量块里，深色只在一个 `.dark .prose-article` 变量块里覆盖——与 `--code-*` 完全同一个套路，也满足 `docs/STYLING.md`「暗色只覆盖变量，不要在 `.dark` 里重复写选择器」的要求。`.callout-<kind>` 只负责把这对变量映射到 `--callout-accent` / `--callout-bg`。
+
+底色直接写成 `oklch(... / 0.07)`（深色 `0.12`~`0.14`），**不用 `color-mix()`**：lightningcss 会把它降级成满不透明度的兜底色，`--selection` 那里踩过同一个坑。
 
 不引入图标库：`lucide-react` 是 React 组件，静态 HTML 里用不了；内联 SVG 要写进 HTML，会让内容与实现耦合。区分靠左侧色条 + 带颜色的标题，这也是 just-the-docs 的做法。
 

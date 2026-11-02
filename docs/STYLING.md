@@ -36,3 +36,12 @@
 - 没有 JS 时 `<pre>` 保留自己的边框和圆角，不要删掉 `.prose-article pre` 那组规则。
 
 高亮颜色是一套 `--code-*` 变量，暗色只覆盖变量，不要再在 `.dark` 里重复写选择器。
+
+### 提示块（callout）
+
+正文里的 `> [!WARNING]` 由 `scripts/remark-callout.ts` 在构建期转成 `<div class="callout callout-warning">`，标题是真实文本节点（`p.callout-title`），不是 CSS `::before`。所以样式只需要管 `.callout` 和 `.callout-title`，不需要关心内容结构。
+
+- 配色是一套 `--callout-note` / `--callout-tip` / `--callout-important` / `--callout-warning` / `--callout-caution`（强调色），每种各配一个同名的 `-bg` 底色变量。浅色定义在 `.prose-article`，深色只在 `.dark .prose-article` 里覆盖变量。改颜色改这两块，不要在 `.callout-*` 选择器里写死颜色。
+- 底色直接写成 `oklch(... / 0.07)`，不要用 `color-mix()`：lightningcss 会把它降级成满不透明度的兜底色（`--selection` 那里踩过）。
+- 这组颜色和 `--code-*` 同类：正文内部的**内容色**，不受「全站唯一的彩色是 `--brand`」那条约束——那条约束管的是 UI chrome（按钮、导航、链接）。
+- `.prose-article blockquote` 是普通引用块的样式，与 callout 无关；callout 渲染成 `div`，不会命中那条规则。

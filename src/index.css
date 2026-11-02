@@ -370,6 +370,86 @@ body {
   --code-comment: var(--muted-foreground);
 }
 
+/* ---------- Callouts (scripts/remark-callout.ts) ---------- */
+/* 与上面的 --code-* 同一类东西：正文内部的内容色，不受「全站只有一个 --brand」
+   那条约束（那条管的是 UI chrome：按钮、导航、链接）。深色只覆盖变量。
+   底色写成带 alpha 的 oklch，不用 color-mix：lightningcss 会把它降级成兜底色。 */
+
+.prose-article {
+  --callout-note: oklch(0.5 0.12 250);
+  --callout-note-bg: oklch(0.5 0.12 250 / 0.07);
+  --callout-tip: oklch(0.48 0.12 165);
+  --callout-tip-bg: oklch(0.48 0.12 165 / 0.07);
+  --callout-important: oklch(0.5 0.16 300);
+  --callout-important-bg: oklch(0.5 0.16 300 / 0.07);
+  --callout-warning: oklch(0.55 0.13 70);
+  --callout-warning-bg: oklch(0.55 0.13 70 / 0.09);
+  --callout-caution: oklch(0.53 0.18 25);
+  --callout-caution-bg: oklch(0.53 0.18 25 / 0.09);
+}
+
+.dark .prose-article {
+  --callout-note: oklch(0.78 0.1 250);
+  --callout-note-bg: oklch(0.78 0.1 250 / 0.12);
+  --callout-tip: oklch(0.79 0.11 165);
+  --callout-tip-bg: oklch(0.79 0.11 165 / 0.12);
+  --callout-important: oklch(0.79 0.13 300);
+  --callout-important-bg: oklch(0.79 0.13 300 / 0.12);
+  --callout-warning: oklch(0.82 0.12 75);
+  --callout-warning-bg: oklch(0.82 0.12 75 / 0.14);
+  --callout-caution: oklch(0.75 0.15 25);
+  --callout-caution-bg: oklch(0.75 0.15 25 / 0.14);
+}
+
+.prose-article .callout {
+  margin: 1.5em 0;
+  padding: 0.85em 1.15em;
+  border-left: 3px solid var(--callout-accent);
+  border-radius: 0 0.375rem 0.375rem 0;
+  background: var(--callout-bg);
+}
+
+.prose-article .callout-title {
+  margin: 0 0 0.4em;
+  color: var(--callout-accent);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.prose-article .callout > :first-child {
+  margin-top: 0;
+}
+
+.prose-article .callout > :last-child {
+  margin-bottom: 0;
+}
+
+.prose-article .callout-note {
+  --callout-accent: var(--callout-note);
+  --callout-bg: var(--callout-note-bg);
+}
+
+.prose-article .callout-tip {
+  --callout-accent: var(--callout-tip);
+  --callout-bg: var(--callout-tip-bg);
+}
+
+.prose-article .callout-important {
+  --callout-accent: var(--callout-important);
+  --callout-bg: var(--callout-important-bg);
+}
+
+.prose-article .callout-warning {
+  --callout-accent: var(--callout-warning);
+  --callout-bg: var(--callout-warning-bg);
+}
+
+.prose-article .callout-caution {
+  --callout-accent: var(--callout-caution);
+  --callout-bg: var(--callout-caution-bg);
+}
+
 .dark .prose-article {
   --code-string: oklch(0.82 0.13 155);
   --code-number: oklch(0.84 0.12 75);

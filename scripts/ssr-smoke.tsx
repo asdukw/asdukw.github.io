@@ -10,6 +10,7 @@ import { langOfPath, stripLang, stripZhPrefix, withLang } from "@/i18n/paths";
 import { getPost, getPosts } from "@/lib/posts";
 import { searchPosts } from "@/lib/search";
 import { tokenize } from "@/lib/tokenize";
+import { renderMdx } from "./mdx";
 import { renderRoute as render } from "./render-route";
 
 let failures = 0;
@@ -140,6 +141,40 @@ check(
 );
 check(searchPosts("   ", "zh") === undefined, "a blank query must mean 'no filter', not 'no results'");
 check((searchPosts("zzzzqqqq", "zh")?.length ?? 0) === 0, "a nonsense query returned results");
+
+// 提示块：`> [!TYPE]` 必须在构建期变成静态 div，标题是真实文本，且标记本身不能
+// 漏进正文。这里走的是构建用的同一条 renderMdx，不是另写一份。
+const zhCallout = await renderMdx("> [!WARNING]\n> 仅供自学。", "zh");
+const enCallout = await renderMdx("> [!WARNING]\n> 仅供自学。", "en");
+check(
+	zhCallout.html.includes('<div class="callout callout-warning">'),
+	`callout did not render as a static div: ${zhCallout.html}`,
+);
+check(zhCallout.html.includes("警告"), "zh callout title is missing");
+check(enCallout.html.includes("Warning"), "en callout title does not follow the body language");
+check(
+	!zhCallout.html.includes("[!WARNING]"),
+	"the raw callout marker leaked into the rendered body",
+);
+
+const unknownCallout = await renderMdx("> [!WARNNG]\n> 拼错了。", "zh");
+check(
+	!unknownCallout.html.includes("callout-"),
+	"an unknown callout type must stay a plain blockquote",
+);
+check(
+	unknownCallout.html.includes("[!WARNNG]"),
+	"an unknown callout type must keep its text",
+);
+
+// 真实文章里的样例（bb-sync 的免责声明），保证内容侧的用法也没坏。
+if (getPost(2, "zh")) {
+	const body = getPost(2, "zh")?.html ?? "";
+	check(
+		body.includes('<div class="callout callout-warning">') && body.includes("警告"),
+		"post 2 does not carry its warning callout",
+	);
+}
 
 // 英文界面、缺英文正文：回退到中文正文，且仍然只占一行。
 const enSearch = searchPosts("课件", "en");

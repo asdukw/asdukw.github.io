@@ -16,6 +16,7 @@ import { createElement, Fragment } from "react";
 import { jsx, jsxs } from "react/jsx-runtime";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Element, Root } from "hast";
+import { remarkCallout } from "./remark-callout.ts";
 
 export type Lang = "zh" | "en";
 
@@ -65,11 +66,17 @@ function rehypeCollectToc(toc: TocItem[]) {
 	};
 }
 
-async function renderMdx(source: string): Promise<{ html: string; toc: TocItem[] }> {
+// `lang` is the article body language, which is what callout titles follow. It is
+// deliberately not the interface language: a zh article rendered under /en must not
+// change its markup, otherwise prerendered HTML and the browser could disagree.
+async function renderMdx(
+	source: string,
+	lang: Lang,
+): Promise<{ html: string; toc: TocItem[] }> {
 	const toc: TocItem[] = [];
 
 	const module = await evaluate(source, {
-		remarkPlugins: [remarkGfm],
+		remarkPlugins: [remarkGfm, [remarkCallout, lang]],
 		rehypePlugins: [
 			rehypeSlug,
 			rehypeCollectToc(toc),
@@ -97,6 +104,10 @@ function readString(data: Record<string, unknown>, key: string, file: string): s
 	}
 	return value.trim();
 }
+
+/** Exported for the smoke test: the callout transform is asserted through the same
+ * pipeline the build uses, not through a copy of it. */
+export { renderMdx };
 
 export async function compilePost(file: string): Promise<CompiledPost> {
 	const raw = await Bun.file(file).text();
@@ -135,7 +146,7 @@ export async function compilePost(file: string): Promise<CompiledPost> {
 	const body = parsed.content.trim();
 	if (!body) fail(`${file}: no content below the frontmatter`);
 
-	const { html, toc } = await renderMdx(body);
+	const { html, toc } = await renderMdx(body, lang);
 	if (!html.trim()) fail(`${file}: compiled MDX produced empty HTML`);
 
 	return {

@@ -77,7 +77,7 @@ export const SECTIONS: GeneratedSection[] = [
 		"lang": "zh",
 		"anchor": "最后",
 		"heading": "最后",
-		"text": "工具是给自己省事写的，用得上的话可以试试。遇到 bug，或者哪门课的课件抓不下来，直接开 issue。仓库里还有两份文档： 配置项说明，以及 接脚本用 （ --json 输出和退出码）。 免责声明：课程资料版权归学校和各位老师所有，下载下来请只用于自己学习，不要二次分发。 仓库： github.com/asdukw/cuhk-shenzhen-blackboard-sync 安装： uv tool install bb-sync 或 pip install --user bb-sync"
+		"text": "工具是给自己省事写的，用得上的话可以试试。遇到 bug，或者哪门课的课件抓不下来，直接开 issue。仓库里还有两份文档： 配置项说明，以及 接脚本用 （ --json 输出和退出码）。 警告 课程资料版权归学校和各位老师所有，下载下来请只用于自己学习，不要二次分发。 仓库： github.com/asdukw/cuhk-shenzhen-blackboard-sync 安装： uv tool install bb-sync 或 pip install --user bb-sync"
 	},
 	{
 		"postId": 1,

@@ -39,6 +39,23 @@ CI 会跑 `git diff --exit-code src/generated/posts.ts`，生成文件和 MDX �
 - 目录（TOC）只收集 h2/h3，由 `scripts/mdx.ts` 在 rehype-slug 之后抽取。
 - 文章顺序由 `scripts/build-content.ts` 统一排序（日期倒序，其次 id 倒序），不要依赖文件名顺序。
 
+## 提示块（callout）
+
+用 GitHub Alerts 的写法，把一个引用块声明成提示块：
+
+```markdown
+> [!WARNING]
+> 课程资料版权归学校和各位老师所有，请只用于自己学习。
+```
+
+- 支持五种：`NOTE`、`TIP`、`IMPORTANT`、`WARNING`、`CAUTION`，大小写不敏感。
+- **标记必须独占一行**：`> [!NOTE] 备注`（同行跟文字）不会被识别，就渲染成普通引用块。
+- 标题语言跟随正文语言（frontmatter 的 `lang`），不跟界面语言：中文正文的 `NOTE` 是「注意」，英文正文是 “Note”。
+- 类型拼错（如 `[!WARNNG]`）不会报错，也不会吞内容：整块按普通引用块渲染，你能在页面上看到原文的标记。
+- 内容支持多段、列表、代码、链接——只要每行都以 `>` 开头。
+
+转换在构建期由 `scripts/remark-callout.ts` 完成，产物是静态 HTML（`div.callout`），没有客户端脚本参与。颜色与样式约定见 [STYLING.md](STYLING.md#提示块callout)。
+
 ## 删文章
 
 只删 MDX 不会删评论，评论会留在 D1 里变成孤儿。需要手动清理：
