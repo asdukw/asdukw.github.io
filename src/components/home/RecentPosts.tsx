@@ -2,7 +2,7 @@ import { Link } from "react-router";
 import { ArrowRight } from "lucide-react";
 import { useLang } from "@/i18n/LanguageContext";
 import { getPosts, POST_INFO } from "@/lib/posts";
-import { PostCard } from "@/components/blog/PostCard";
+import { PostRow } from "@/components/blog/PostRow";
 
 export function RecentPosts({
 	limit = 3,
@@ -28,9 +28,9 @@ export function RecentPosts({
 			</div>
 
 			{posts.length ? (
-				<div className="grid gap-4 sm:grid-cols-2">
+				<div>
 					{posts.map((post) => (
-						<PostCard key={post.key} post={post} />
+						<PostRow key={post.key} post={post} />
 					))}
 				</div>
 			) : (

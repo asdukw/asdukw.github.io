@@ -116,8 +116,15 @@ export function PostDetailPage() {
 						{post.tags.length > 0 && (
 							<div className="mt-3 flex flex-wrap gap-1.5">
 								{post.tags.map((tag) => (
-									<Badge key={tag} variant="secondary" className="font-normal">
-										{tag}
+									<Badge
+										key={tag}
+										variant="secondary"
+										className="font-normal"
+										asChild
+									>
+										<Link to={`/post?tag=${encodeURIComponent(tag)}`}>
+											{tag}
+										</Link>
 									</Badge>
 								))}
 							</div>
