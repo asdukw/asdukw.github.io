@@ -1,0 +1,32 @@
+---
+title: asdukw 笔记
+description: 课程与技术笔记，按系列 / 章 / 讲组织。
+template: splash
+hero:
+  tagline: 课程与技术笔记，按系列、章、讲组织。
+  actions:
+    - text: 浏览笔记
+      link: /notes/
+      icon: right-arrow
+    - text: 写作指南
+      link: /guide/
+      icon: document
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<CardGrid stagger>
+	<Card title="按系列组织" icon="open-book">
+		每个主题一个系列，系列下分章，章内分讲，侧栏自动生成对应目录树。
+	</Card>
+	<Card title="顺序阅读" icon="right-arrow">
+		每讲自带上一讲 / 下一讲，适合按课程顺序从头读到尾。
+	</Card>
+	<Card title="全文搜索" icon="search">
+		基于 Pagefind 的本地搜索，构建期生成索引，不依赖外部服务。
+	</Card>
+	<Card title="纯静态" icon="laptop">
+		构建为静态 HTML，部署在 Cloudflare Pages，和主站互不影响。
+	</Card>
+</CardGrid>

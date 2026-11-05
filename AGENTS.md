@@ -14,6 +14,8 @@ bun run build:content && bun run typecheck && bun run typecheck:worker && bun ru
 
 `src/generated/posts.ts`、`src/generated/projects.ts` 与 `src/styles.css` 是自动生成但必须提交的文件；CI 会检查两个 generated 文件是否有未提交的漂移。
 
+文档站在独立的 `notes/` 子项目里（Astro + Starlight），有自己的依赖和构建：`cd notes && bun run build`。根目录的 `tsconfig.json` / `eslint.config.js` 已排除 `notes/**`，两套构建互不干扰。
+
 ## 代码地图
 
 - `src/index.html` 是真正的 app shell；根目录 `index.html` 是过时占位。
@@ -31,3 +33,4 @@ bun run build:content && bun run typecheck && bun run typecheck:worker && bun ru
 | 样式、主题、暗色模式、正文排版 | `docs/STYLING.md` |
 | 文件职责、数据流、i18n、图标 | `docs/ARCHITECTURE.md` |
 | 添加 shadcn 组件 | `docs/COMPONENTS.md` |
+| 文档站（`notes/`，Astro + Starlight，独立部署） | `notes/README.md` |
