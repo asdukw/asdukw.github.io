@@ -1,6 +1,7 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import starlightLinksValidator from 'starlight-links-validator';
 
 // 文档站独立部署在 Cloudflare Pages（项目名 asdukw-notes）。
 // 正式域名确定后改这里的 site，sitemap / canonical 会跟着变。
@@ -57,5 +58,7 @@ export default defineConfig({
 				{ label: '写作指南', slug: 'guide' },
 			],
 		}),
+		// 构建时校验站内链接和锚点，避免文档越写越多后出现死链。
+		starlightLinksValidator(),
 	],
 });
