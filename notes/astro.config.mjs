@@ -5,7 +5,7 @@ import starlight from '@astrojs/starlight';
 // 文档站独立部署在 Cloudflare Pages（项目名 asdukw-notes）。
 // 正式域名确定后改这里的 site，sitemap / canonical 会跟着变。
 export default defineConfig({
-	site: 'https://notes.asdukw.pages.dev',
+	site: 'https://asdukw-notes.pages.dev',
 	integrations: [
 		starlight({
 			title: 'asdukw 笔记',
