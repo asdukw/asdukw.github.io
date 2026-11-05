@@ -23,7 +23,7 @@ export const PROJECTS: GeneratedProject[] = [
 		"homepageUrl": "",
 		"language": "Kotlin",
 		"topics": [],
-		"stars": 3,
+		"stars": 4,
 		"forks": 1,
 		"updated": "2026-11-02"
 	},
