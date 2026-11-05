@@ -10,6 +10,8 @@ export default defineConfig({
 		starlight({
 			title: 'asdukw 笔记',
 			description: '课程与技术笔记，按系列 / 章 / 讲组织。',
+			// 和主站统一的配色 / 字体与少量质感修饰。
+			customCss: ['./src/styles/custom.css'],
 			// 自定义 404 由 src/content/docs/404.md 提供，关掉内置 404 路由避免两条路由抢 /404。
 			disable404Route: true,
 			// 中文-only：root locale 的 lang 决定 <html lang>。
