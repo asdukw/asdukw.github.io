@@ -5,14 +5,14 @@ name: Deploy notes to Cloudflare Pages
 # 首次使用前：
 #   1. 在 Cloudflare 创建 Pages 项目 `asdukw-notes`（direct upload，不需要 Git 集成）。
 #   2. 复用现有的 CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID secrets（需含 Pages: Edit）。
-#   3. 确认下方 push 触发符合预期后，取消注释启用自动部署；否则只能手动触发。
+#   3. 已开启 push 自动部署：改 notes/** 推 master 即自动检查、构建、部署。
 on:
+  push:
+    branches: [master]
+    paths:
+      - "notes/**"
+      - ".github/workflows/deploy-notes.yml"
   workflow_dispatch:
-  # push:
-  #   branches: [master]
-  #   paths:
-  #     - "notes/**"
-  #     - ".github/workflows/deploy-notes.yml"
 
 jobs:
   deploy-notes:
