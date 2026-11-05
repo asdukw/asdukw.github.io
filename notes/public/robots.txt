@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://asdukw-notes.pages.dev/sitemap-index.xml
