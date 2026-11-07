@@ -50,11 +50,20 @@ export default defineConfig({
 			social: [
 				{ icon: 'github', label: 'GitHub', href: 'https://github.com/asdukw' },
 			],
-			// 侧栏结构：notes/ 下每个子目录是一个「系列」，系列内每个子目录是一「章」，
-			// 章里的每个 .md 是一「讲」。autogenerate 按目录层级自动生成分组，
-			// 所以新增系列/章节只需要新建目录和文件，不用改这里。
+			// 侧栏结构：系列（如 Redis）下挂「概览」和若干「章」，章里每个 .md 是一「讲」。
+			// 章节分组要显示中文的内容标题（而不是目录名 chapter-02），所以这里显式列出；
+			// 新增章节时，在对应系列下加一条 { label, items: [{ autogenerate: { directory } }] }。
 			sidebar: [
-				{ label: '笔记', items: [{ autogenerate: { directory: 'notes' } }] },
+				{
+					label: 'Redis',
+					items: [
+						{ label: '概览', slug: 'notes/redis' },
+						{
+							label: 'Redis 中的数据类型',
+							items: [{ autogenerate: { directory: 'notes/redis/chapter-02' } }],
+						},
+					],
+				},
 			],
 		}),
 		// 构建时校验站内链接和锚点，避免文档越写越多后出现死链。
