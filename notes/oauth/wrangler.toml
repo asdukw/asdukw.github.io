@@ -1,0 +1,11 @@
+name = "notes-decap-oauth"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# 允许编辑的 GitHub 账号（大小写不敏感）。
+[vars]
+ADMIN_LOGIN = "asdukw"
+
+# Secret 不写在这里，用命令设置：
+#   wrangler secret put GITHUB_OAUTH_ID
+#   wrangler secret put GITHUB_OAUTH_SECRET

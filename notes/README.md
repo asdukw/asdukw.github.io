@@ -29,6 +29,14 @@ bun run build    # 静态产物输出到 notes/dist
 bun run preview  # 预览构建结果
 ```
 
+## 在线编辑（Decap CMS）
+
+`/admin/` 是 [Decap CMS](https://decapcms.org) 管理端（源码在 `public/admin/`），
+可在浏览器里编辑笔记，保存即提交到 `master` 触发自动部署，仅限仓库作者账号。
+
+登录需要一个 GitHub OAuth 代理 worker，代码在 `notes/oauth/`，部署与配置步骤见
+`notes/oauth/README.md`（需要自己的 GitHub/Cloudflare 账号操作一次）。
+
 ## 部署
 
 独立 Cloudflare Pages 项目 `asdukw-notes`，由仓库根目录

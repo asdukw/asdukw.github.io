@@ -1,0 +1,61 @@
+# Decap CMS 配置 —— https://decapcms.org/docs/configuration-options/
+#
+# 管理端入口：/admin/（来自 notes/public/admin）
+# 登录鉴权：走独立 OAuth 代理 worker（见 notes/oauth/README.md）。
+# 保存流程：不启用编辑工作流，保存即直接提交到 backend.branch(master)，
+#           由 .github/workflows/deploy-notes.yml 自动构建部署。
+site_url: https://asdukw-notes.pages.dev
+display_url: https://asdukw-notes.pages.dev
+logo_url: https://asdukw-notes.pages.dev/favicon.png
+
+backend:
+  name: github
+  repo: asdukw/asdukw.github.io
+  branch: master
+  # ⚠️ 必改：部署 notes/oauth worker 后填它的地址（无末尾斜杠）。
+  # Decap 会依次请求 {base_url}/auth 和 {base_url}/callback。
+  base_url: https://CHANGE-ME.workers.dev
+
+# 图片上传（可选）：文件存到 notes/public/uploads，站点通过 /uploads 访问。
+media_folder: notes/public/uploads
+public_folder: /uploads
+
+collections:
+  - name: redis
+    label: Redis 笔记
+    files:
+      - name: redis-overview
+        label: 概览
+        file: notes/src/content/docs/notes/redis/index.md
+        fields:
+          - { label: 标题, name: title, widget: string }
+          - { label: 摘要, name: description, widget: text, required: false }
+          - label: 侧栏
+            name: sidebar
+            widget: object
+            required: false
+            fields:
+              - { label: 标签, name: label, widget: string, required: false }
+              - { label: 排序, name: order, widget: number, required: false }
+          - { label: 正文, name: body, widget: markdown }
+
+  - name: redis-data-types
+    label: Redis 中的数据类型
+    label_singular: 一讲
+    folder: notes/src/content/docs/notes/redis/chapter-02
+    create: true
+    extension: md
+    format: frontmatter
+    # 新建讲时文件名默认由标题生成；纯中文标题可能生成为空，
+    # 建议新讲用 git 直接建文件，或在标题里带英文 slug。
+    # 已有文件按文件名识别，编辑不受影响。
+    fields:
+      - { label: 标题, name: title, widget: string }
+      - { label: 摘要, name: description, widget: text, required: false }
+      - label: 侧栏
+        name: sidebar
+        widget: object
+        required: false
+        fields:
+          - { label: 排序, name: order, widget: number, required: false }
+      - { label: 正文, name: body, widget: markdown }

@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
+Disallow: /admin
 
 Sitemap: https://asdukw-notes.pages.dev/sitemap-index.xml
