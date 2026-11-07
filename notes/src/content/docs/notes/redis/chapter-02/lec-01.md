@@ -1,0 +1,166 @@
+---
+title: 2.1 String：最基础的字节串
+description: Redis 唯一没有结构的类型：存储模型、SET/GET 与常用选项、原子计数器、位操作、512 MB 上限与 int/embstr/raw 三种底层编码。
+sidebar:
+  order: 1
+---
+
+## 一句话定位
+
+String 是 Redis 里**唯一没有内置结构**的类型：一个 key 映射到一串字节。这串字节可以是文本、序列化后的对象（JSON / MessagePack）、甚至一张图片的二进制——Redis 不关心内容是什么。
+
+正因为它太基础，很多「看起来是别的类型」的东西底层都是 String：Bitmap 本质是位串，HyperLogLog 本质也是 String。所以把 String 吃透，后面几个类型会轻很多。
+
+## 存储模型与边界
+
+- **二进制安全**：value 是字节序列，Redis 不对它做任何编码假设，也不按字符串终结符截断。
+- **大小上限 512 MB**：单个 value 最大 512 MB。这是硬限制，不是建议。
+- **key 本身也是 string**：Redis 的 key 就是字符串，所以 String 类型其实是「string → string」的映射。
+- **`SET` 是赋值，不看旧类型**：哪怕 key 上原来存的是 hash，`SET` 也会直接覆盖成 string。它不报错、不合并。
+
+## SET / GET：一切的起点
+
+```bash
+> SET bike:1 Deimos
+OK
+> GET bike:1
+"Deimos"
+```
+
+`SET` 真正有用的地方在它的选项上，日常八成场景靠这几个组合就够了：
+
+| 选项 | 作用 | 典型用途 |
+| --- | --- | --- |
+| `EX` / `PX` | 过期时间（秒 / 毫秒） | 缓存、验证码 |
+| `EXAT` / `PXAT` | 过期到某个绝对时间戳 | 到期时间固定的场景 |
+| `KEEPTTL` | 保留 key 原有的 TTL | 更新值但不想重置过期 |
+| `NX` | **不存在**才设置 | 分布式锁、幂等占位 |
+| `XX` | **存在**才设置 | 只更新已存在的 key |
+| `GET` | 返回设置前的旧值（6.2+） | 需要读取旧值又不想多一次 RTT |
+
+最经典的组合——用 `SET NX PX` 抢锁：
+
+```bash
+> SET lock:order:1001 <random-token> NX PX 30000
+OK          # 抢到锁，30 秒后自动过期
+> SET lock:order:1001 <other-token> NX PX 30000
+(nil)       # 已被别人持有，设置失败
+```
+
+:::caution
+`SET NX` 拿到锁只解决「谁能进」；安全释放锁还需要「只删自己那把」，否则会误删别人的锁。传统做法是用 Lua 比较 token 再删。Redis 8.4 起可以用下面讲的 `IFEQ` + `DELEX` 原生实现。
+:::
+
+### 8.4 新增：值比较（CAS / CAD）
+
+`SET` 的多组选项从 Redis 8.4 起支持比较当前值，这就是 compare-and-swap：
+
+```bash
+> SET bike:1 Deimos
+OK
+> SET bike:1 Ares IFEQ Deimos     # 当前值等于 Deimos 才写
+OK
+> SET bike:1 Zeus IFEQ Deimos     # 值已变成 Ares，条件不满足
+(nil)
+> GET bike:1
+"Ares"
+```
+
+对应的删除是 `DELEX`（compare-and-delete），比较摘要则用 `IFDEQ` / `IFDNE`，配合 `DIGEST` 取 XXH3 哈希。这些都需要**Redis 8.4+**，低版本别照抄。
+
+## 其他常用命令族
+
+除了 `SET` / `GET`，String 还有一堆命令，按用途记：
+
+| 用途 | 命令 | 备注 |
+| --- | --- | --- |
+| 只在不存在时设 | `SETNX`、`SET ... NX` | `SETNX` 是旧写法，功能被 `SET` 选项覆盖 |
+| 带过期设置 | `SETEX` / `PSETEX`、`SET ... EX` | 同理，新代码优先用 `SET` 选项 |
+| 读旧值并写新值 | `GETSET`、`SET ... GET` | `GETSET` 是原子版「改值并拿旧值」 |
+| 读后删 / 读后改 TTL | `GETDEL`、`GETEX` | 6.2+ |
+| 批量读写 | `MSET` / `MGET` | 减少网络往返，O(N) |
+| 拼接 / 长度 / 截取 | `APPEND`、`STRLEN`、`GETRANGE`/`SUBSTR`、`SETRANGE` | 见「性能」一节 |
+| 位操作 | `SETBIT`、`GETBIT`、`BITCOUNT`、`BITOP`、`BITFIELD` | 见下 |
+
+`GETSET` 有个常见用法：假设用 `INCR` 统计访问量，想每小时取一次数并归零，又不想丢计数——`GETSET key 0` 一次性「读出旧值、写回 0」：
+
+```bash
+> SET visits 42
+> GETSET visits 0
+"42"     # 拿到本周期累计值
+> GET visits
+"0"
+```
+
+## String 当计数器
+
+只要 value 是整数，就能用 `INCR` / `INCRBY` / `DECR` / `DECRBY` 做**原子**加减，key 不存在时按 0 起算：
+
+```bash
+> SET total_crashes 0
+> INCR total_crashes
+(integer) 1
+> INCRBY total_crashes 10
+(integer) 11
+```
+
+浮点用 `INCRBYFLOAT`。原子性意味着并发下也不会丢自增，这是拿 Redis 做访问计数、库存、限流的基础：
+
+```bash
+# 简单的每分钟限流：计数器 + 过期
+> INCR rate:user:42:2026110718
+> EXPIRE rate:user:42:2026110718 60 NX   # 只在第一次设置 TTL
+```
+
+:::note
+计数器一旦被 `SET` 成非数字，`INCR` 会直接报错；反过来 `INCR`、`APPEND` 这类写操作会让内部编码从 `int`/`embstr` 退化成 `raw`（见下文）。所以别把「同一个 key 一会儿当计数器、一会儿当普通字符串改」当成好习惯。
+:::
+
+## 位操作与 bitfield
+
+String 可以按**位**操作：`SETBIT` / `GETBIT` 读写单个位，`BITCOUNT` 数 1，`BITPOS` 找第一个 0/1，`BITOP` 做位级交并差。Bitmap（签到、UV 去重）就是把这个能力用满。另外 `BITFIELD` 可以在一个 string 里切出多个整数位段。
+
+这部分内容不少，后面「Bitmap」和「bitfield」会单独讲，这里先知道**它们都在 String 上**即可。
+
+## 性能
+
+- 绝大多数操作 **O(1)**。
+- 要小心 `SUBSTR` / `GETRANGE` / `SETRANGE`：这几个是随机访问，**可能 O(n)**，在超大 string 上频繁调用会出问题。
+- `APPEND` 摊还 O(1)（Redis 动态字符串会预留空间翻倍）。
+- `MGET` / `MSET` 是 O(N)，但省的是往返次数，通常比循环单条更划算。
+
+## 底层编码（补充，原页面没讲）
+
+String 在内部有三种编码，用 `OBJECT ENCODING key` 能看：
+
+| 编码 | 触发条件 | 特点 |
+| --- | --- | --- |
+| `int` | value 能解析成 64 位有符号整数 | 直接存整数，不额外建字符串对象 |
+| `embstr` | 长度 ≤ 44 字节 | 对象头和字符串一次分配，只读；一旦 `APPEND`/`SETRANGE` 会转成 `raw` |
+| `raw` | 长度 > 44 字节 | 普通 SDS（动态字符串） |
+
+实践含义：纯计数 key 落在 `int` 最省；短字符串（配置、标志、小 JSON）落在 `embstr` 省一次内存分配；但 `embstr` 只读，别对它频繁追加。
+
+:::caution
+编码是内部实现，版本之间可能变，**不要把它当 API 契约**写在业务逻辑里依赖。它只适合用来解释内存占用、做排查。
+:::
+
+## 什么时候不该用 String
+
+- 存结构化数据却整体序列化成一个 string：读改任一字段都要整块取出再写回，浪费带宽也容易并发覆盖——这种优先 `Hash` 或 `JSON`。
+- 需要集合成员关系或排序：用 `Set` / `Sorted Set`。
+- 但也要知道：String 是一切的兜底，理论上用 string + 应用层逻辑能模拟所有类型，代价（内存、服务端计算、并发正确性）得自己扛。这个取舍留到「数据类型选型」一章再展开。
+
+## 小结
+
+- String = 二进制安全的字节串，上限 512 MB；`SET` 是赋值，会无视旧类型直接覆盖。
+- 日常靠 `SET` 的 `EX/PX/NX/XX/GET/KEEPTTL` 选项，锁和幂等都用得上；8.4+ 还有 `IFEQ`/`DELEX` 做 CAS。
+- 计数器用 `INCR` 系列拿原子性；批量读写用 `MSET`/`MGET` 省 RTT。
+- 底层 `int`/`embstr`/`raw` 三编码，`OBJECT ENCODING` 可查，但别当契约。
+- 位图和 bitfield 都长在 String 上，后面单独讲。
+
+## 参考
+
+- [Redis Strings](https://redis.io/docs/latest/develop/data-types/strings/)
+- [Redis Bitmaps](https://redis.io/docs/latest/develop/data-types/strings/bitmaps/)
+- [Redis Bitfields](https://redis.io/docs/latest/develop/data-types/strings/bitfields/)
