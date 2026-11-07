@@ -1,6 +1,6 @@
 # 评论 API（Cloudflare Worker + D1）
 
-`worker/` 是独立部署的 Cloudflare Worker：`src/index.ts`（路由）、`src/auth.ts`（GitHub OAuth）、`src/session.ts`（会话）、`src/comments.ts`（评论查询）、`src/http.ts`（CORS/cookie/JSON）、`schema.sql`（D1 表结构）、`wrangler.toml`（`name = "asdukw-api"`）。
+`worker/` 是独立部署的 Cloudflare Worker：`src/index.ts`（路由）、`src/auth.ts`（GitHub OAuth）、`src/decap.ts`（Decap CMS 登录）、`src/session.ts`（会话）、`src/comments.ts`（评论查询）、`src/http.ts`（CORS/cookie/JSON）、`schema.sql`（D1 表结构）、`wrangler.toml`（`name = "asdukw-api"`）。
 
 ## 认证模型
 
@@ -19,6 +19,7 @@
 ## 端点
 
 - `GET /api/auth/login`、`GET /api/auth/callback`、`GET /api/auth/user`、`POST /api/auth/logout`
+- `GET /decap/auth`、`GET /decap/callback`（供 notes 站 Decap CMS 登录，复用同一 OAuth App）
 - `GET|POST /api/comments`
 - `POST /api/comments/:id/like`
 - `POST /api/comments/:id/status`（管理员隐藏评论）

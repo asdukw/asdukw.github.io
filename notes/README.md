@@ -32,10 +32,12 @@ bun run preview  # 预览构建结果
 ## 在线编辑（Decap CMS）
 
 `/admin/` 是 [Decap CMS](https://decapcms.org) 管理端（源码在 `public/admin/`），
-可在浏览器里编辑笔记，保存即提交到 `master` 触发自动部署，仅限仓库作者账号。
+可在浏览器里编辑笔记，保存即直接提交 `master` 触发自动部署，仅限仓库作者账号。
 
-登录需要一个 GitHub OAuth 代理 worker，代码在 `notes/oauth/`，部署与配置步骤见
-`notes/oauth/README.md`（需要自己的 GitHub/Cloudflare 账号操作一次）。
+登录复用主站 `asdukw-api` worker 的 `/decap/auth`、`/decap/callback`
+（`worker/src/decap.ts`，与评论登录共用同一个 GitHub OAuth App），不需要额外 worker。
+启用前需在 GitHub OAuth App 里加一条 redirect URI：
+`https://asdukw-api.zhouzongyuu.workers.dev/decap/callback`，并重新部署 worker。
 
 ## 部署
 

@@ -11,6 +11,7 @@ import {
 	handleSetLike,
 	handleSetStatus,
 } from "./comments";
+import { handleDecapAuth, handleDecapCallback } from "./decap";
 import { apiError, corsHeaders, json } from "./http";
 
 const LIKE_PATH = /^\/api\/comments\/(\d+)\/like$/;
@@ -36,6 +37,16 @@ async function route(request: Request, env: Env): Promise<Response> {
 	}
 	if (url.pathname === "/api/auth/logout") {
 		return method === "POST" ? handleLogout(request, env) : apiError(405, "method_not_allowed");
+	}
+
+	// Decap CMS 的 OAuth 端（复用同一 OAuth App，供 notes 文档站在线编辑登录）。
+	if (url.pathname === "/decap/auth") {
+		return method === "GET" ? handleDecapAuth(request, env) : apiError(405, "method_not_allowed");
+	}
+	if (url.pathname === "/decap/callback") {
+		return method === "GET"
+			? handleDecapCallback(request, env)
+			: apiError(405, "method_not_allowed");
 	}
 
 	if (url.pathname === "/api/comments") {
