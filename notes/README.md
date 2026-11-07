@@ -10,14 +10,13 @@ Cloudflare Pages（项目 `asdukw-notes`），与主站 `asdukw-pages` 互不影
 ```
 src/content/docs/
 ├── index.mdx                 # 首页（splash）
-├── guide.md                  # 写作指南
 └── notes/                    # 所有笔记
     ├── index.md              # 笔记总览
     └── <系列>/<章>/<讲>.md    # 例：redis/chapter-01/lec-01.md
 ```
 
 系列 / 章 / 讲直接对应目录层级；左侧 sidebar 由 `astro.config.mjs` 里的
-`autogenerate` 自动生成，新增内容不用改配置。详见站内「写作指南」页。
+`autogenerate` 自动生成，新增内容不用改配置。写作与目录约定见 `notes/AGENTS.md`。
 
 ## 命令
 

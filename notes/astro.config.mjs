@@ -55,7 +55,6 @@ export default defineConfig({
 			// 所以新增系列/章节只需要新建目录和文件，不用改这里。
 			sidebar: [
 				{ label: '笔记', items: [{ autogenerate: { directory: 'notes' } }] },
-				{ label: '写作指南', slug: 'guide' },
 			],
 		}),
 		// 构建时校验站内链接和锚点，避免文档越写越多后出现死链。
