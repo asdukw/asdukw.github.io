@@ -5,6 +5,8 @@ sidebar:
   order: 1
 ---
 
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
 ## 一句话定位
 
 String 是 Redis 里**唯一没有内置结构**的类型：一个 key 映射到一串字节。这串字节可以是文本、序列化后的对象（JSON / MessagePack）、甚至一张图片的二进制——Redis 不关心内容是什么。
@@ -20,12 +22,32 @@ String 是 Redis 里**唯一没有内置结构**的类型：一个 key 映射到
 
 ## SET / GET：一切的起点
 
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
 ```bash
 > SET bike:1 Deimos
 OK
 > GET bike:1
 "Deimos"
 ```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+import redis
+
+r = redis.Redis(host="localhost", port=6379, decode_responses=True)
+
+r.set("bike:1", "Deimos")   # True
+r.get("bike:1")             # 'Deimos'
+```
+
+</TabItem>
+</Tabs>
+
+Python 侧统一用 redis-py（`pip install redis`）。上面这段之后，示例都沿用这个 `r`；`decode_responses=True` 是为了拿到 `str` 而不是 `bytes`，否则 `get` 会返回 `b'Deimos'`。
 
 `SET` 真正有用的地方在它的选项上，日常八成场景靠这几个组合就够了：
 
@@ -40,12 +62,27 @@ OK
 
 最经典的组合——用 `SET NX PX` 抢锁：
 
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
 ```bash
 > SET lock:order:1001 <random-token> NX PX 30000
 OK          # 抢到锁，30 秒后自动过期
 > SET lock:order:1001 <other-token> NX PX 30000
 (nil)       # 已被别人持有，设置失败
 ```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+# set(..., nx=True, px=30000) 全是一次往返，别拆成 SETNX + EXPIRE
+r.set("lock:order:1001", "b7f6a1", nx=True, px=30000)        # True
+r.set("lock:order:1001", "other-token", nx=True, px=30000)   # None
+```
+
+</TabItem>
+</Tabs>
 
 :::caution
 `SET NX` 拿到锁只解决「谁能进」；安全释放锁还需要「只删自己那把」，否则会误删别人的锁。传统做法是用 Lua 比较 token 再删。Redis 8.4 起可以用下面讲的 `IFEQ` + `DELEX` 原生实现。
@@ -54,6 +91,9 @@ OK          # 抢到锁，30 秒后自动过期
 ### 8.4 新增：值比较（CAS / CAD）
 
 `SET` 的多组选项从 Redis 8.4 起支持比较当前值，这就是 compare-and-swap：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
 
 ```bash
 > SET bike:1 Deimos
@@ -65,6 +105,20 @@ OK
 > GET bike:1
 "Ares"
 ```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+# redis-py 还没有封装 IFEQ，直接发原始命令
+r.set("bike:1", "Deimos")
+r.execute_command("SET", "bike:1", "Ares", "IFEQ", "Deimos")   # 'OK'
+r.execute_command("SET", "bike:1", "Zeus", "IFEQ", "Deimos")   # None
+r.get("bike:1")                                                # 'Ares'
+```
+
+</TabItem>
+</Tabs>
 
 对应的删除是 `DELEX`（compare-and-delete），比较摘要则用 `IFDEQ` / `IFDNE`，配合 `DIGEST` 取 XXH3 哈希。这些都需要**Redis 8.4+**，低版本别照抄。
 
@@ -84,6 +138,9 @@ OK
 
 `GETSET` 有个常见用法：假设用 `INCR` 统计访问量，想每小时取一次数并归零，又不想丢计数——`GETSET key 0` 一次性「读出旧值、写回 0」：
 
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
 ```bash
 > SET visits 42
 > GETSET visits 0
@@ -92,9 +149,24 @@ OK
 "0"
 ```
 
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.set("visits", 42)
+r.set("visits", 0, get=True)   # '42' —— 读出旧值并写回 0
+r.get("visits")                # '0'
+```
+
+</TabItem>
+</Tabs>
+
 ## String 当计数器
 
 只要 value 是整数，就能用 `INCR` / `INCRBY` / `DECR` / `DECRBY` 做**原子**加减，key 不存在时按 0 起算：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
 
 ```bash
 > SET total_crashes 0
@@ -104,13 +176,46 @@ OK
 (integer) 11
 ```
 
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.set("total_crashes", 0)
+r.incr("total_crashes")         # 1
+r.incrby("total_crashes", 10)   # 11
+```
+
+</TabItem>
+</Tabs>
+
 浮点用 `INCRBYFLOAT`。原子性意味着并发下也不会丢自增，这是拿 Redis 做访问计数、库存、限流的基础：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
 
 ```bash
 # 简单的每分钟限流：计数器 + 过期
 > INCR rate:user:42:2026110718
 > EXPIRE rate:user:42:2026110718 60 NX   # 只在第一次设置 TTL
 ```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+key = "rate:user:42:2026110718"
+r.incr(key)
+r.expire(key, 60, nx=True)   # 只在第一次设置 TTL，避免每次重置窗口
+
+# 两条命令想一次往返，可以放进 pipeline：
+# pipe = r.pipeline()
+# pipe.incr(key)
+# pipe.expire(key, 60, nx=True)
+# pipe.execute()
+```
+
+</TabItem>
+</Tabs>
 
 :::note
 计数器一旦被 `SET` 成非数字，`INCR` 会直接报错；反过来 `INCR`、`APPEND` 这类写操作会让内部编码从 `int`/`embstr` 退化成 `raw`（见下文）。所以别把「同一个 key 一会儿当计数器、一会儿当普通字符串改」当成好习惯。

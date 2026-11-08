@@ -32,6 +32,7 @@ bun run dev        # 本地开发，默认 http://localhost:4321
 - **卡片文案 = 名字 + 一行**：一句话说清"这个系列解决什么问题"，不要在卡片里写段落。
 - **语气**：直接、可验证，避免营销腔；能给出可复现的命令或现象就别只给结论。
 - 系列首页（`notes/<系列>/index.md`）承担概览页职责，`sidebar.order` 决定系列在侧栏里的顺序。
+- **命令示例要给可切换的客户端版本**：用 Starlight 的 `<Tabs>` + `<TabItem>`，每个页面内统一 `syncKey`（Redis 系列用 `redis-client`），标签固定为 `redis-cli` / `Python`。新增示例两边都要给，不要只写 CLI。需要组件的页面用 `.mdx`。
 
 ## 与主站的关系
 
