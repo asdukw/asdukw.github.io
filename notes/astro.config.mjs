@@ -81,6 +81,32 @@ export default defineConfig({
 						},
 					],
 				},
+				{
+					label: 'DDIA',
+					items: [
+						{ label: '概览', slug: 'notes/ddia' },
+						{
+							label: '第 1 章 · 数据系统架构中的权衡',
+							items: [{ autogenerate: { directory: 'notes/ddia/chapter-01' } }],
+						},
+						{
+							label: '第 2 章 · 定义非功能性需求',
+							items: [{ autogenerate: { directory: 'notes/ddia/chapter-02' } }],
+						},
+						{
+							label: '第 3 章 · 数据模型与查询语言',
+							items: [{ autogenerate: { directory: 'notes/ddia/chapter-03' } }],
+						},
+						{
+							label: '第 4 章 · 存储与检索',
+							items: [{ autogenerate: { directory: 'notes/ddia/chapter-04' } }],
+						},
+						{
+							label: '第 5 章 · 编码与演化',
+							items: [{ autogenerate: { directory: 'notes/ddia/chapter-05' } }],
+						},
+					],
+				},
 			],
 		}),
 		// 构建时校验站内链接和锚点，避免文档越写越多后出现死链。
