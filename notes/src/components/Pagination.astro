@@ -1,0 +1,80 @@
+---
+/**
+ * 覆盖 Starlight 默认的 Pagination：
+ * 只保留同一系列内的上一篇 / 下一篇，避免讲完一个系列直接跳到另一个系列。
+ * 系列分组在 sidebar 里是连续的，所以边界处直接省略链接即可。
+ *
+ * 这里刻意不引用 Starlight 内部的 Icon 组件（它不在包的公开导出里），
+ * 用字符箭头代替，少耦合一层内部实现。
+ */
+const { dir, pagination } = Astro.locals.starlightRoute;
+
+const series = Astro.url.pathname.match(/^\/notes\/([^/]+)\//)?.[1];
+const sameSeries = (link: { href?: string } | undefined) =>
+	!series || Boolean(link?.href?.startsWith(`/notes/${series}/`));
+
+const prev = sameSeries(pagination.prev) ? pagination.prev : undefined;
+const next = sameSeries(pagination.next) ? pagination.next : undefined;
+---
+
+{
+	(prev || next) && (
+		<div class="pagination-links print:hidden" dir={dir}>
+			{prev && (
+				<a href={prev.href} rel="prev">
+					<span class="arrow" aria-hidden="true">←</span>
+					<span>
+						{Astro.locals.t('page.previousLink')}
+						<br />
+						<span class="link-title">{prev.label}</span>
+					</span>
+				</a>
+			)}
+			{next && (
+				<a href={next.href} rel="next">
+					<span>
+						{Astro.locals.t('page.nextLink')}
+						<br />
+						<span class="link-title">{next.label}</span>
+					</span>
+					<span class="arrow" aria-hidden="true">→</span>
+				</a>
+			)}
+		</div>
+	)
+}
+
+<style>
+	.pagination-links {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
+		gap: 1rem;
+	}
+	.pagination-links a {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.75rem 1rem;
+		border: 1px solid var(--sl-color-gray-5);
+		border-radius: 0.5rem;
+		text-decoration: none;
+		font-size: var(--sl-text-sm);
+		color: var(--sl-color-gray-2);
+	}
+	.pagination-links a:hover {
+		border-color: var(--sl-color-gray-2);
+	}
+	.pagination-links a[rel='next'] {
+		justify-content: flex-end;
+		text-align: end;
+	}
+	.arrow {
+		font-size: 1.25rem;
+		line-height: 1;
+	}
+	.link-title {
+		font-size: var(--sl-text-base);
+		font-weight: 600;
+		color: var(--sl-color-white);
+	}
+</style>
