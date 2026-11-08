@@ -1,0 +1,410 @@
+---
+title: "2.2 Bitmaps：按位存储的紧凑位图"
+description: 位图不是独立类型，而是在 String 上的一组位操作：SETBIT/GETBIT、BITCOUNT/BITPOS、BITOP 的八种运算符、拆分多 key 的写法，以及复杂度账。
+sidebar:
+  order: 2
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+先纠正一个常见误解：**Bitmaps 不是一种独立的数据类型**，它只是定义在 String 类型上的一组面向位的操作。字符串本身就是二进制安全的字节块，把它当成位向量（bit vector）看待，就有了位图。
+
+因为单个字符串上限是 512 MB，而 512 MB = 2^32 位，所以一个 key 最多能装下 **4,294,967,296 个位**。官方给的两个典型场景是：
+
+- 集合的成员恰好是 0~N 的整数时，用位图表示集合非常省空间；
+- 权限标记：每一位代表一种权限，思路和文件系统的权限位一样。
+
+| 命令 | 作用 | 复杂度 |
+| --- | --- | --- |
+| `SETBIT key offset value` | 把某一位设为 1 或 0 | O(1) |
+| `GETBIT key offset` | 取某一位的值 | O(1) |
+| `BITCOUNT key` | 统计值为 1 的位数（population count） | O(n) |
+| `BITPOS key bit` | 找第一个值为 0 或 1 的位 | O(n) |
+| `BITOP op dest key [key...]` | 多字符串之间的按位运算 | O(n) |
+
+## 示例
+
+场景：1000 名骑手在乡间比赛，自行车上的传感器编号 0~999。你想快速判断某个传感器在这一小时内有没有向服务器上报过。
+
+做法是拿「当前小时」当 key，传感器编号当位偏移：只要 123 号上报过，就把第 123 位置 1。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> SETBIT pings:2024-01-01-00:00 123 1
+(integer) 0
+> GETBIT pings:2024-01-01-00:00 123
+1
+> GETBIT pings:2024-01-01-00:00 456
+0
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+import redis
+
+# 这里刻意不加 decode_responses：下面要读原始字节
+r = redis.Redis(host="localhost", port=6379)
+
+r.setbit("pings:2024-01-01-00:00", 123, 1)   # 0，返回该位原来的值
+r.getbit("pings:2024-01-01-00:00", 123)      # 1
+r.getbit("pings:2024-01-01-00:00", 456)      # 0
+```
+
+</TabItem>
+</Tabs>
+
+`SETBIT` 返回的是**被覆盖前的旧值**（这里 0 表示原来是 0），不是写入结果，别把它当布尔值用。
+
+如果 `decode_responses=True`，之后用 `GET` 读位图可能直接抛 `UnicodeDecodeError`——位图里的字节通常不是合法 UTF-8。读原始位图时保留 `bytes` 更稳。
+
+## 位操作
+
+位操作分两类：**单比特的常数时间操作**（把某位设为 1/0、读某位的值），以及**成组位的操作**（比如统计某个区间里有多少位是 1）。
+
+位图最大的价值是省内存。举个例子：一个系统用自增的用户 ID 标识用户，那么「这个用户要不要收简报」这种一比特的信息，40 亿用户也只要 512 MB。
+
+几个细节：
+
+- `SETBIT` 第一个参数是位号，第二个是要写入的 1 或 0；如果寻址的位超出当前字符串长度，命令会**自动扩容**。
+- `GETBIT` 只返回指定位的值；超出字符串长度的位一律**当作 0**，不报错。
+
+有三个命令操作成组的位：
+
+1. `BITOP`：在不同字符串之间做按位运算，可用运算符为 `AND`、`OR`、`XOR`、`NOT`、`DIFF`、`DIFF1`、`ANDOR`、`ONE`。
+2. `BITCOUNT`：population counting，统计值为 1 的位数。
+3. `BITPOS`：找出第一个值为 0 或 1 的位。
+
+`BITCOUNT` 和 `BITPOS` 都可以只作用于字符串的**字节区间**，不必扫整个字符串。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> BITCOUNT pings:2024-01-01-00:00
+(integer) 1
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.bitcount("pings:2024-01-01-00:00")   # 1
+```
+
+</TabItem>
+</Tabs>
+
+官方给的另一个例子是**最长连续签到**：把建站那天当作第 0 天，用户每访问一天就用 `SETBIT` 置一位。位下标这样算：当前 unix 时间减去起始偏移，再除以一天的秒数（3600 × 24）。于是每个用户对应一个小字符串，`BITCOUNT` 直接给出总访问天数；要算最长连续段，多次调用 `BITPOS`，或者干脆把位图取回客户端自己分析。
+
+### 位运算（Bitwise operations）
+
+`BITOP` 对两个或更多源 key 做按位运算，结果写进目标 key，返回值是结果字符串的字节长度。
+
+下面三个 key 作为例子，位从左往右、从 0 开始编号：
+
+- `A` = `11011000`
+- `B` = `00011001`
+- `C` = `01101100`
+
+先用 `SETBIT` 把它们造出来：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> SETBIT A 0 1
+(integer) 0
+> SETBIT A 1 1
+(integer) 0
+> SETBIT A 3 1
+(integer) 0
+> SETBIT A 4 1
+(integer) 0
+> GET A
+"\xd8"
+# 十六进制 0xd8 = 0b11011000
+
+> SETBIT B 3 1
+(integer) 0
+> SETBIT B 4 1
+(integer) 0
+> SETBIT B 7 1
+(integer) 0
+> GET B
+"\x19"
+# 十六进制 0x19 = 0b00011001
+
+> SETBIT C 1 1
+(integer) 0
+> SETBIT C 2 1
+(integer) 0
+> SETBIT C 4 1
+(integer) 0
+> SETBIT C 5 1
+(integer) 0
+> GET C
+"l"
+# ASCII "l" = 0x6c = 0b01101100
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+for bit in (0, 1, 3, 4):
+    r.setbit("A", bit, 1)
+r.get("A")    # b'\xd8' = 0b11011000
+
+for bit in (3, 4, 7):
+    r.setbit("B", bit, 1)
+r.get("B")    # b'\x19' = 0b00011001
+
+for bit in (1, 2, 4, 5):
+    r.setbit("C", bit, 1)
+r.get("C")    # b'l' = 0x6c = 0b01101100
+```
+
+</TabItem>
+</Tabs>
+
+八个运算符的语义一目了然，对照着写：
+
+| 运算符 | 目标位为 1 的条件 | 对 A/B/C 的结果 |
+| --- | --- | --- |
+| `AND` | 所有源 key 的该位都是 1 | `00001000` |
+| `OR` | 至少一个源 key 的该位是 1 | `11111101` |
+| `XOR` | 两个源 key 该位不同（多个源时依次异或） | `11000001`（A 与 B） |
+| `NOT` | 源 key 的该位是 0（唯一的一元运算符） | `00100111` |
+| `DIFF` | 第一个 key 是 1，其余 key 全不是 1 | `10000000` |
+| `DIFF1` | 第一个 key 不是 1，其余至少一个是 1 | `00100101` |
+| `ANDOR` | 第一个 key 是 1，且其余至少一个是 1 | `01011000` |
+| `ONE` | 在且仅在一个源 key 里是 1 | `10100101` |
+
+#### `AND`
+
+只有所有源 key 的该位都为 1 时，目标位才置 1。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> BITOP AND R A B C
+(integer) 1
+> GET R
+"\b"
+# ASCII "\b"（退格）= 0x08 = 0b00001000
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.bitop("AND", "R", "A", "B", "C")   # 1，结果字符串的字节长度
+r.get("R")                           # b'\x08' = 0b00001000
+```
+
+</TabItem>
+</Tabs>
+
+#### `OR`
+
+至少一个源 key 的该位为 1，目标位就置 1。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> BITOP OR R A B C
+(integer) 1
+> GET R
+"\xfd"
+# 十六进制 0xfd = 0b11111101
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.bitop("OR", "R", "A", "B", "C")    # 1
+r.get("R")                           # b'\xfd' = 0b11111101
+```
+
+</TabItem>
+</Tabs>
+
+#### `XOR`
+
+两个源 key 时，该位在两个 key 里取值不同则目标位置 1。三个及以上源 key 时，先异或前两个，结果再和下一个异或，依次往下。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> BITOP XOR R A B
+(integer) 1
+> GET R
+"\xc1"
+# 十六进制 0xc1 = 0b11000001
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.bitop("XOR", "R", "A", "B")        # 1
+r.get("R")                           # b'\xc1' = 0b11000001
+```
+
+</TabItem>
+</Tabs>
+
+#### `NOT`
+
+源 key 的该位是 0 时目标位置 1——这是唯一的一元运算符，只能有一个源 key。注意结果是 `00100111`，和直觉里的「按字节取反得 0x27」一致。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> BITOP NOT R A
+(integer) 1
+> GET R
+"'"
+# ASCII "'"（单引号）= 0x27 = 0b00100111
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.bitop("NOT", "R", "A")             # 1
+r.get("R")                           # b"'" = 0x27 = 0b00100111
+```
+
+</TabItem>
+</Tabs>
+
+#### `DIFF`
+
+第一个源 key 该位为 1，且其余源 key 都不是 1 时，目标位置 1。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> BITOP DIFF R A B C
+(integer) 1
+> GET R
+"\x80"
+# 十六进制 0x80 = 0b10000000
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.bitop("DIFF", "R", "A", "B", "C")  # 1
+r.get("R")                           # b'\x80' = 0b10000000
+```
+
+</TabItem>
+</Tabs>
+
+#### `DIFF1`
+
+第一个源 key 该位不是 1，但其余源 key 里至少有一个是 1 时，目标位置 1。也就是 `DIFF` 的反向补集。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> BITOP DIFF1 R A B C
+(integer) 1
+> GET R
+"%"
+# ASCII "%"（百分号）= 0x25 = 0b00100101
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.bitop("DIFF1", "R", "A", "B", "C") # 1
+r.get("R")                           # b'%' = 0x25 = 0b00100101
+```
+
+</TabItem>
+</Tabs>
+
+#### `ANDOR`
+
+第一个源 key 该位为 1，且其余源 key 里至少有一个也是 1 时，目标位置 1。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> BITOP ANDOR R A B C
+(integer) 1
+> GET R
+"X"
+# ASCII "X" = 0x58 = 0b01011000
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.bitop("ANDOR", "R", "A", "B", "C") # 1
+r.get("R")                           # b'X' = 0x58 = 0b01011000
+```
+
+</TabItem>
+</Tabs>
+
+#### `ONE`
+
+该位在源 key 里**恰好一个**为 1 时，目标位置 1。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> BITOP ONE R A B C
+(integer) 1
+> GET R
+"\xa5"
+# 十六进制 0xa5 = 0b10100101
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.bitop("ONE", "R", "A", "B", "C")   # 1
+r.get("R")                           # b'\xa5' = 0b10100101
+```
+
+</TabItem>
+</Tabs>
+
+## 把位图拆成多个 key
+
+位图天然可以拆。拆的理由有两个：一是把数据分片，二是一般来说都该避免操作过大的 key。
+
+拆法很朴素：每个 key 存 M 位。位号 `bit-number` 落在哪个 key，用 `bit-number / M` 算 key 名；在 key 内部要访问第几位，用 `bit-number MOD M`。比如 M = 1000000 时，第 1234567 位就在 `.../1` 号 key 的第 234567 位上。
+
+## 性能
+
+- `SETBIT` 和 `GETBIT`：**O(1)**。
+- `BITOP`：**O(n)**，n 是比较中最长那个字符串的长度。
+
+## 延伸阅读
+
+- [Redis Bitmaps Explained](https://www.youtube.com/watch?v=oj8LdJQjhJo)（官方短视频，讲如何用位图做在线游戏的地图探索）
+- [Redis University 的 RU101](https://university.redis.com/courses/ru101/)（详细讲位图）
+- [官方原文](https://redis.io/docs/latest/develop/data-types/bitmaps/)

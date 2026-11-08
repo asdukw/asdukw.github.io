@@ -13,14 +13,14 @@ sidebar:
 整体是**先横向铺开、再纵向深入**：
 
 1. **先打基础**——搞清 Redis 是什么、为什么快、key 空间怎么管，后面所有内容都建立在这层直觉上。
-2. **再逐个过数据类型**——五个通用类型（String / Hash / List / Set / Sorted Set）和各种扩展类型（Bitmap、HyperLogLog、Geospatial、Stream、JSON、Time series……）各讲一讲，重点是每种类型的定位、命令、底层编码和坑。
+2. **再逐个过数据类型**——按官方文档的顺序把 14 种类型讲完（从 Strings 到 Vector sets），重点是每种类型的定位、命令、底层编码和坑。顺序跟官方一致，方便随时对照原文。
 3. **然后才讲选型**——等所有类型都见过，再回头做「数据类型怎么选」的决策树和内存成本对比。顺序反过来的话，选型只能背结论，记不住理由。
 4. **最后进入工程**——持久化、高可用与集群、缓存三大问题、运维与性能调优。
 
 ## 目录规划
 
 > 下面是计划中的章节结构，随写作推进逐步补全；写好的讲会在对应位置补上链接。
-> 目前系列刚起步，正文尚未展开。
+> 第二章（数据类型）已按官方顺序写完，其余章节待续。
 
 ### 第一章 · 入门
 
@@ -30,18 +30,22 @@ sidebar:
 
 ### 第二章 · 数据类型（逐个讲）
 
-- [String：最基础的字节串](/notes/redis/chapter-02/lec-01/)——计数器、位图、分布式锁的底座
-- Hash：一个 key 内的字段-值对，对象存储与字段级过期
-- List：双端队列，队列 / 栈 / 消息列表
-- Set：去重集合，成员关系与交并差
-- Sorted Set：带 score 的有序集合，排行榜、优先级队列
-- Bitmap：位级操作，签到、布隆过滤器的实现素材
-- HyperLogLog：近似基数统计，海量去重估算
-- Geospatial：地理位置范围查询（底层是 sorted set）
-- Stream：日志式追加 + 消费者组，消息队列的正统方案
-- JSON：原生嵌套文档类型（RedisJSON）
-- Time series：带时间戳的指标点与区间聚合
-- 扩展类型速览：Vector sets、Arrays（preview）等
+顺序与 [Redis 官方文档的数据类型目录](https://redis.io/docs/latest/develop/data-types/)一致，方便对照原文；每篇的小节结构也沿用官方页面的 h2，只做翻译与总结。
+
+- [2.1 Strings：最基础的字节串](/notes/redis/chapter-02/lec-01/)——字节序列、SET 选项、原子计数器、512 MB 上限
+- [2.2 Bitmaps：按位存储的紧凑位图](/notes/redis/chapter-02/lec-02/)——SETBIT/GETBIT、BITCOUNT，签到与 UV 去重
+- [2.3 Bitfields：在一个字符串里打包多个整数](/notes/redis/chapter-02/lec-03/)——任意位宽与偏移的整数读写
+- [2.4 Arrays：可索引的可变长序列](/notes/redis/chapter-02/lec-04/)——按下标读写、环形缓冲、聚合与搜索
+- [2.5 Geospatial：地理位置与半径查询](/notes/redis/chapter-02/lec-05/)——底层是 sorted set 的地理编码
+- [2.6 Hashes：字段级读写的小对象](/notes/redis/chapter-02/lec-06/)——字段级过期、listpack 紧凑编码
+- [2.7 JSON：原生嵌套文档](/notes/redis/chapter-02/lec-07/)——按路径读写，模块能力
+- [2.8 Lists：双端队列与阻塞读取](/notes/redis/chapter-02/lec-08/)——队列 / 栈 / 消息列表，BLPOP 语义
+- [2.9 Probabilistic：概率型数据结构](/notes/redis/chapter-02/lec-09/)——HyperLogLog、Bloom、Cuckoo、CMS、t-digest、Top-K
+- [2.10 Sets：去重集合与集合运算](/notes/redis/chapter-02/lec-10/)——交并差、随机抽样
+- [2.11 Sorted sets：带分数的有序集合](/notes/redis/chapter-02/lec-11/)——区间与字典序查询、排行榜
+- [2.12 Streams：日志式追加与消费者组](/notes/redis/chapter-02/lec-12/)——entry ID、XREAD、PEL 与认领
+- [2.13 Time series：时间戳序列与聚合](/notes/redis/chapter-02/lec-13/)——retention、降采样、NaN 语义
+- [2.14 Vector sets：向量相似度检索](/notes/redis/chapter-02/lec-14/)——FP32 存储、相似度查询
 
 ### 第三章 · 数据类型选型
 

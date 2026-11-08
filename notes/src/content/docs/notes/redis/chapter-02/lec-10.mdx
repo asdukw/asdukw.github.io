@@ -1,0 +1,313 @@
+---
+title: 2.10 Sets：去重集合与集合运算
+description: 按官方文档结构梳理 Redis 集合：SADD/SREM/SISMEMBER、交并差、SCARD/SMEMBERS/SRANDMEMBER、SPOP 的随机取出、2^32-1 上限与性能取舍。
+sidebar:
+  order: 10
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Redis 的 Set 是**无序**的、**成员唯一**的字符串集合。因为「唯一」由数据结构本身保证，往里面重复 `SADD` 同一个成员不会报错，只会静默忽略。
+
+它最常出现在三类场景：
+
+- 记录唯一项，比如统计某篇博客的所有独立访问 IP；
+- 表示关系，比如「拥有某个角色的所有用户」；
+- 做集合运算，交、并、差都能在服务端一次算完。
+
+## 示例
+
+官方示例用两场比赛的参赛车辆来演示。注意第二个 `SADD` 返回 0——成员已存在，重复添加被忽略：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> SADD bikes:racing:france bike:1
+(integer) 1
+> SADD bikes:racing:france bike:1
+(integer) 0
+> SADD bikes:racing:france bike:2 bike:3
+(integer) 2
+> SADD bikes:racing:usa bike:1 bike:4
+(integer) 2
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+import redis
+
+r = redis.Redis(host="localhost", port=6379, decode_responses=True)
+
+r.sadd("bikes:racing:france", "bike:1")              # 1
+r.sadd("bikes:racing:france", "bike:1")              # 0，去重
+r.sadd("bikes:racing:france", "bike:2", "bike:3")    # 2
+r.sadd("bikes:racing:usa", "bike:1", "bike:4")       # 2
+```
+
+</TabItem>
+</Tabs>
+
+判断某辆车是否在美国那场比赛里，用 `SISMEMBER`；一次问多个成员则用 `SMISMEMBER`，省往返：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> SISMEMBER bikes:racing:usa bike:1
+(integer) 1
+> SISMEMBER bikes:racing:usa bike:2
+(integer) 0
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.sismember("bikes:racing:usa", "bike:1")   # True
+r.sismember("bikes:racing:usa", "bike:2")   # False
+```
+
+</TabItem>
+</Tabs>
+
+两场比赛都参加的车用交集 `SINTER`：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> SINTER bikes:racing:france bikes:racing:usa
+1) "bike:1"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.sinter("bikes:racing:france", "bikes:racing:usa")   # {'bike:1'}
+```
+
+</TabItem>
+</Tabs>
+
+只要数量不要内容时用 `SCARD`（cardinality）：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> SCARD bikes:racing:france
+(integer) 3
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.scard("bikes:racing:france")   # 3
+```
+
+</TabItem>
+</Tabs>
+
+## 教程
+
+`SADD` 负责加元素，其余操作——判断存在性、求交并差——都围绕它展开。
+
+取出全部成员用 `SMEMBERS`。**Set 没有顺序保证**，每次调用的返回顺序都可能不同，所以别把输出顺序当契约：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> DEL bikes:racing:france
+(integer) 1
+> SADD bikes:racing:france bike:1 bike:2 bike:3
+(integer) 3
+> SMEMBERS bikes:racing:france
+1) "bike:3"
+2) "bike:1"
+3) "bike:2"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.delete("bikes:racing:france")
+r.sadd("bikes:racing:france", "bike:1", "bike:2", "bike:3")
+r.smembers("bikes:racing:france")   # {'bike:1', 'bike:2', 'bike:3'}
+```
+
+</TabItem>
+</Tabs>
+
+批量判断一次问三个成员，返回值按输入顺序逐个对应 1/0：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+# 先把法国的集合重建一遍，让这段示例能独立运行
+> DEL bikes:racing:france
+(integer) 1
+> SADD bikes:racing:france bike:1 bike:2 bike:3
+(integer) 3
+> SISMEMBER bikes:racing:france bike:1
+(integer) 1
+> SMISMEMBER bikes:racing:france bike:2 bike:3 bike:4
+1) (integer) 1
+2) (integer) 1
+3) (integer) 0
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.sismember("bikes:racing:france", "bike:1")                  # True
+r.smismember("bikes:racing:france", "bike:2", "bike:3", "bike:4")   # [True, True, False]
+```
+
+</TabItem>
+</Tabs>
+
+差集 `SDIFF` 回答「在 A 里但不在 B 里」。**参数顺序有意义**，差集不满足交换律：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> DEL bikes:racing:usa
+(integer) 1
+> SADD bikes:racing:usa bike:1 bike:4
+(integer) 2
+> SDIFF bikes:racing:france bikes:racing:usa
+1) "bike:3"
+2) "bike:2"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.delete("bikes:racing:usa")
+r.sadd("bikes:racing:usa", "bike:1", "bike:4")
+r.sdiff("bikes:racing:france", "bikes:racing:usa")   # {'bike:2', 'bike:3'}
+```
+
+</TabItem>
+</Tabs>
+
+加上第三场比赛，交、并、差可以一起看。`SDIFF` 在差集为空时返回空数组：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> DEL bikes:racing:france bikes:racing:usa bikes:racing:italy
+(integer) 2
+> SADD bikes:racing:france bike:1 bike:2 bike:3
+(integer) 3
+> SADD bikes:racing:usa bike:1 bike:4
+(integer) 2
+> SADD bikes:racing:italy bike:1 bike:2 bike:3 bike:4
+(integer) 4
+> SINTER bikes:racing:france bikes:racing:usa bikes:racing:italy
+1) "bike:1"
+> SUNION bikes:racing:france bikes:racing:usa bikes:racing:italy
+1) "bike:2"
+2) "bike:1"
+3) "bike:4"
+4) "bike:3"
+> SDIFF bikes:racing:france bikes:racing:usa bikes:racing:italy
+(empty array)
+> SDIFF bikes:racing:france bikes:racing:usa
+1) "bike:3"
+2) "bike:2"
+> SDIFF bikes:racing:usa bikes:racing:france
+1) "bike:4"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.delete("bikes:racing:france", "bikes:racing:usa", "bikes:racing:italy")
+r.sadd("bikes:racing:france", "bike:1", "bike:2", "bike:3")
+r.sadd("bikes:racing:usa", "bike:1", "bike:4")
+r.sadd("bikes:racing:italy", "bike:1", "bike:2", "bike:3", "bike:4")
+
+r.sinter("bikes:racing:france", "bikes:racing:usa", "bikes:racing:italy")   # {'bike:1'}
+r.sunion("bikes:racing:france", "bikes:racing:usa", "bikes:racing:italy")   # 四个车号
+r.sdiff("bikes:racing:france", "bikes:racing:usa", "bikes:racing:italy")    # set()
+r.sdiff("bikes:racing:france", "bikes:racing:usa")                          # {'bike:2', 'bike:3'}
+r.sdiff("bikes:racing:usa", "bikes:racing:france")                          # {'bike:4'}
+```
+
+</TabItem>
+</Tabs>
+
+删除有两条路径： `SREM` 精确删除指定成员；`SPOP` 随机弹出并移除一个成员。只想随机看一眼、不想改动集合时用 `SRANDMEMBER`：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> DEL bikes:racing:france
+(integer) 1
+> SADD bikes:racing:france bike:1 bike:2 bike:3 bike:4 bike:5
+(integer) 5
+> SREM bikes:racing:france bike:1
+(integer) 1
+> SPOP bikes:racing:france
+"bike:3"
+> SMEMBERS bikes:racing:france
+1) "bike:2"
+2) "bike:4"
+3) "bike:5"
+> SRANDMEMBER bikes:racing:france
+"bike:2"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.delete("bikes:racing:france")
+r.sadd("bikes:racing:france", "bike:1", "bike:2", "bike:3", "bike:4", "bike:5")
+
+r.srem("bikes:racing:france", "bike:1")          # 1
+r.spop("bikes:racing:france")                     # 随机取走一个，例如 'bike:3'
+r.smembers("bikes:racing:france")                 # 剩 3 个
+r.srandmember("bikes:racing:france")              # 随机返回一个，集合不变
+```
+
+</TabItem>
+</Tabs>
+
+`SPOP` 的随机性是它的核心价值：抽奖、随机指派任务、从候选池里无放回抽样，都可以直接用它实现，而且是服务端原子的——多个客户端并发 `SPOP` 不会弹出同一个成员。
+
+## 上限
+
+单个 Set 最多 **2^32 - 1（4,294,967,295）** 个成员。
+
+## 性能
+
+集合的绝大多数操作——添加、删除、判断成员是否存在——都是 **O(1)**，这也是它适合做存在性索引的原因。
+
+需要小心的是 `SMEMBERS`：它是 **O(n)**，一次把整个集合塞进一个响应里。集合有几十万成员以上时，改用 `SSCAN` 迭代取，避免单次响应过大。
+
+## 替代方案
+
+- 如果只是做**成员存在性判断**，且集合很大或来自流式数据，内存占用会是个问题。对精度要求不那么严格时，可以用**布隆过滤器 / 布谷鸟过滤器**替代。
+- Set 常被当成一种索引使用。如果需要真正的索引与查询能力，应该看 **JSON** 数据类型和 **Redis Search** 的检索特性。
+
+## 延伸阅读
+
+- [Redis Sets Explained](https://www.youtube.com/watch?v=PKdCppSNTGQ) 与 [Redis Sets Elaborated](https://www.youtube.com/watch?v=aRw5ME_5kMY)：两个短视频，讲得短但完整。
+- [Redis University 的 RU101](https://university.redis.com/courses/ru101/)：系统讲集合的部分。
+- [官方原文](https://redis.io/docs/latest/develop/data-types/sets/)

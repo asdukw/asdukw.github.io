@@ -1,0 +1,451 @@
+---
+title: 2.9 Probabilistic：概率型数据结构
+description: 用精度换内存的一族估算结构：HyperLogLog 基数、Bloom/Cuckoo 存在性、Count-min sketch 频次、t-digest 分位数、Top-K 热点，各自的问题、命令、误差与内存量级。
+sidebar:
+  order: 9
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+概率型数据结构（probabilistic data structures）给出的不是精确值，而是对计数、频次、排名这类统计量的**估计**。换来的是极高的效率：不必按元素个数成比例地占内存，往往是常数空间。附带的好处还有隐私——只存指纹或草图，天然模糊了时间、地点等敏感信息。
+
+一句话概括这一族：**用精度换内存**。代价是结果带误差，且误差有明确的上界和适用范围，用错了地方就会得到看似正常其实无意义的数字。
+
+关于来源需要说清楚：这一族里只有 **HyperLogLog 是 Redis 核心内置**的命令（`PFADD` 等，从很早的版本就有）。其余五个（Bloom filter、Cuckoo filter、Count-min sketch、t-digest、Top-K）来自 **Redis Stack** 的 RedisBloom 模块，Redis 8 起随发行版一起提供；在更老的部署里需要单独装模块才能用 `BF.*`、`CF.*`、`CMS.*`、`TDIGEST.*`、`TOPK.*` 这些命令。
+
+## HyperLogLog
+
+**解决什么问题**：估算一个集合的**基数**（去重后的元素个数）。常规做法要记住见过的每个元素才能去重，内存随元素数线性增长；HyperLogLog 只维护一个固定大小的状态，从不存原始元素。
+
+**核心命令**：`PFADD` 加入元素、`PFCOUNT` 取基数估计、`PFMERGE` 合并多个 HLL。API 用起来和 Set 的 `SADD` / `SCARD` 一样，只是「加」进去的其实不是元素，而是被哈希后的状态。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> PFADD bikes Hyperion Deimos Phoebe Quaoar
+(integer) 1
+> PFCOUNT bikes
+(integer) 4
+> PFADD commuter_bikes Salacia Mimas Quaoar
+(integer) 1
+> PFMERGE all_bikes bikes commuter_bikes
+OK
+> PFCOUNT all_bikes
+(integer) 6
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.pfadd("bikes", "Hyperion", "Deimos", "Phoebe", "Quaoar")   # 1
+r.pfcount("bikes")                                            # 4
+r.pfadd("commuter_bikes", "Salacia", "Mimas", "Quaoar")       # 1
+r.pfmerge("all_bikes", "bikes", "commuter_bikes")             # True
+r.pfcount("all_bikes")                                        # 6
+```
+
+</TabItem>
+</Tabs>
+
+合并两个 HLL 得到的是「两个来源并集的基数估计」，注意 `Quaoar` 在两边都出现过，合并后只算一次。
+
+**误差与内存**：标准误差 **0.81%**，内存**最多 12 KB**；元素很少时占用远小于 12 KB。可估算的集合上限是 2^64（18,446,744,073,709,551,616）个成员。写入 `PFADD` 和读取 `PFCOUNT` 都是常数时间、常数空间；`PFMERGE` 是 O(n)，n 为草图个数。
+
+HLL 在类型上其实是独立的，但**编码成字符串**存储，所以可以用 `GET` 序列化出来、用 `SET` 塞回去。
+
+**典型场景**：网页的 UV（当日独立访客）、一首歌/一个视频的独立观看人数、搜索框里每天的去重查询词。有些国家不允许存 IP 等个人标识，精确 UV 根本做不了，HLL 正好绕开——按「页面 × 时间周期」建一个 HLL，每次访问把标识 `PFADD` 进去。
+
+## 布隆过滤器
+
+**解决什么问题**：判断「这个元素在不在集合里」，用固定大小的极小内存。它不存元素本身，只存哈希后的位，因此牺牲精度：**否定答案一定正确**（说不在就真的不在），**肯定答案可能是假阳性**（说在，其实没加过）。这个单向可靠性恰恰够用——一次「不在」就能挡掉后面昂贵得多的操作。
+
+**核心命令**（RedisBloom 模块）：`BF.RESERVE` 建过滤器、`BF.ADD` / `BF.MADD` 加元素、`BF.EXISTS` / `BF.MEXISTS` 判断是否存在。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> BF.RESERVE bikes:models 0.001 1000000
+OK
+> BF.ADD bikes:models "Smoky Mountain Striker"
+(integer) 1
+> BF.EXISTS bikes:models "Smoky Mountain Striker"
+(integer) 1
+> BF.MADD bikes:models "Rocky Mountain Racer" "Cloudy City Cruiser" "Windy City Wippet"
+1) (integer) 1
+2) (integer) 1
+3) (integer) 1
+> BF.MEXISTS bikes:models "Rocky Mountain Racer" "Cloudy City Cruiser" "Windy City Wippet"
+1) (integer) 1
+2) (integer) 1
+3) (integer) 1
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.bf().reserve("bikes:models", 0.001, 1000000)         # True
+r.bf().add("bikes:models", "Smoky Mountain Striker")   # True
+r.bf().exists("bikes:models", "Smoky Mountain Striker")  # True
+r.bf().madd("bikes:models", "Rocky Mountain Racer",
+            "Cloudy City Cruiser", "Windy City Wippet")  # [True, True, True]
+r.bf().mexists("bikes:models", "Rocky Mountain Racer",
+               "Cloudy City Cruiser", "Windy City Wippet")  # [True, True, True]
+```
+
+</TabItem>
+</Tabs>
+
+例子是「一百万种自行车型号，避免重名」：建一个容量 100 万、误判率 0.1% 的过滤器，逐个加型号并查重。注意即使只加了几个元素，也可能出现假阳性。
+
+建过滤器的完整形式是：
+
+```
+BF.RESERVE {key} {error_rate} {capacity} [EXPANSION expansion] [NONSCALING]
+```
+
+- `error_rate` 是 0 到 1 的小数，想要 0.1%（千分之一）就写 `0.001`。
+- `capacity` 是你预计的总条目数。估大了浪费内存；估小了过滤器会填满，然后在上面叠新的**子过滤器**。叠加后「写入」延迟不变，但「查询」延迟上升——因为查询要从最新的子过滤器开始逐个往下试。
+- `EXPANSION` 控制扩容倍率，新子过滤器的大小是上一个的 `EXPANSION` 倍。元素数未知时建议取 2 以上以减少子过滤器数量；已知总量时建议取 1 以省内存。默认 **2**。每加一层子过滤器，过滤器会多用哈希函数以维持目标误判率。
+- 确定不会扩容就加 `NONSCALING`，这样能少用一个哈希函数；但真的达到初始容量后，误判率就开始上涨。
+
+值得强调的是：往 Bloom filter 加元素**永远不会因为「满了」而失败**，只是误判率会往上走；自动扩容就是为了把误判率拉回设定值。
+
+**误差与内存**：实际占用由误判率决定。最优哈希函数个数是 `ceil(-ln(error_rate) / ln(2))`，每个元素需要的位数是 `-ln(error_rate) / ln(2)^2`，于是总位数是 `capacity * -ln(error_rate) / ln(2)^2`：
+
+| 误判率 | 哈希函数个数 | 每元素位数 |
+| --- | --- | --- |
+| 1% | 7 | 9.585 |
+| 0.1% | 10 | 14.378 |
+| 0.01% | 14 | 19.170 |
+
+对比一下用 Set 做成员判断：内存约 `capacity * (192 bit + value 长度)`。存 IP 地址大约每条约 40 字节（320 位），比 0.01% 误判率的 Bloom filter 所需的 19.170 位高一个数量级。
+
+插入是 O(K)（K 为哈希函数个数），查询是 O(K)；若是多层子过滤器则为 O(K*n)。
+
+**典型场景**：判断用户名/邮箱/域名/slug 是否已被占用（查不到就直接放行，查到再回主库确认）；判断某张信用卡是否已被挂失（机构之间还能交换号码列表而不泄露号码本身）；广告投放里判断「用户是否看过这个广告 / 买过这个商品」。
+
+## 布谷鸟过滤器
+
+**解决什么问题**：和 Bloom filter 一样做存在性判断，但**支持删除**，查询更快。RedisBloom 的 Cuckoo filter 用「桶数组」代替位数组：每个桶存若干条指纹，元素 `x` 的指纹落在由两个哈希函数决定的桶里；查询就是在这几个桶里找有没有相同的指纹。
+
+**核心命令**：`CF.RESERVE` 建、`CF.ADD` 加、`CF.EXISTS` 查、`CF.DEL` 删。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> CF.RESERVE bikes:models 1000
+OK
+> CF.ADD bikes:models "Smoky Mountain Striker"
+(integer) 1
+> CF.EXISTS bikes:models "Smoky Mountain Striker"
+(integer) 1
+> CF.EXISTS bikes:models "Terrible Bike Name"
+(integer) 0
+> CF.DEL bikes:models "Smoky Mountain Striker"
+(integer) 1
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.cf().reserve("bikes:models", 1000)                       # True
+r.cf().add("bikes:models", "Smoky Mountain Striker")       # True
+r.cf().exists("bikes:models", "Smoky Mountain Striker")    # True
+r.cf().exists("bikes:models", "Terrible Bike Name")        # False
+r.cf().delete("bikes:models", "Smoky Mountain Striker")    # True
+```
+
+</TabItem>
+</Tabs>
+
+`CF.ADD` 在 key 不存在时会顺手建一个，但尺寸未必合适，最好先用 `CF.RESERVE` 按预期容量建好。
+
+**误差与内存**：误判率由指纹长度 `f` 直接决定，默认 `f = 8` 位。容量按 `capacity = n*f/α` 计算（α 是装填率），并向上取整到 2 的幂。因为桶会被占满，过滤器往往在真正的 capacity 之前就宣布自己满了，装填率到不了 100%。
+
+桶大小 `BUCKETSIZE` 决定每桶条目数，是「装填率」和「误判率」的权衡：
+
+| 桶大小 | 误判率 | 装填率 |
+| --- | --- | --- |
+| 1 | 2/256 ≈ 0.78%（可达到的最低值） | 55% |
+| 3 | 2.34% | 80% |
+| 4 | 3.12% | 95% |
+
+误判率公式为 `error_rate = (buckets * 2) / 256`。`EXPANSION` 触发扩容时同样是叠子过滤器，复合误差是各子过滤器误差之和，因此误差随层数线性增长。`MAXITERATIONS` 决定为一条指纹找空位的尝试次数，过滤器越满、这个值越大，插入越慢。
+
+两个坑：**同一元素重复 `CF.ADD` 会产生多条条目**，把过滤器提前填满；删元素可以用来释放空间，不必重建。
+
+所有操作（加、查、删）都是 **O(1)**。
+
+**典型场景**：定向广告活动里判断「这个用户是否已报名」（报名后从过滤器里删掉）、优惠码/优惠券是否已被使用（用过就从过滤器删掉，再回主库确认）。Bloom filter 的适用场景 Cuckoo filter 基本都能覆盖——只要你能接受删除带来的额外成本。
+
+## 计数最小草图
+
+**解决什么问题**：估算**数据流中某个元素的出现频次**，用亚线性空间。它用多个哈希函数把元素映射到一张计数器表里，取各层计数的最小值作为估计。因为会碰撞，它只**高估、不低估**。
+
+关键的使用纪律：低于某个阈值（由 `error_rate` 决定）的结果应当直接忽略，很多时候等同于 0。所以它适合找**高频元素**，不适合数低频元素——低频部分全是噪声。
+
+**核心命令**：`CMS.INITBYPROB` 建草图、`CMS.INCRBY` 增加计数、`CMS.QUERY` 查询估计、`CMS.INFO` 查看宽度/深度/总计数。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> CMS.INITBYPROB bikes:profit 0.001 0.002
+OK
+> CMS.INCRBY bikes:profit "Smokey Mountain Striker" 100
+1) (integer) 100
+> CMS.INCRBY bikes:profit "Rocky Mountain Racer" 200 "Cloudy City Cruiser" 150
+1) (integer) 200
+2) (integer) 150
+> CMS.QUERY bikes:profit "Smokey Mountain Striker" "Rocky Mountain Racer" "Cloudy City Cruiser" "Terrible Bike Name"
+1) (integer) 100
+2) (integer) 200
+3) (integer) 150
+4) (integer) 0
+> CMS.INFO bikes:profit
+1) width
+2) (integer) 2000
+3) depth
+4) (integer) 9
+5) count
+6) (integer) 450
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.cms().initbyprob("bikes:profit", 0.001, 0.002)              # True
+r.cms().incrby("bikes:profit", ["Smokey Mountain Striker"], [100])   # [100]
+r.cms().incrby("bikes:profit",
+               ["Rocky Mountain Racer", "Cloudy City Cruiser"],
+               [200, 150])                                    # [200, 150]
+r.cms().query("bikes:profit", "Smokey Mountain Striker",
+              "Rocky Mountain Racer", "Cloudy City Cruiser",
+              "Terrible Bike Name")                           # [100, 200, 150, 0]
+r.cms().info("bikes:profit")
+```
+
+</TabItem>
+</Tabs>
+
+上面的参数含义：误差率 0.1%（0.001），置信度 99.8%（0.998），也就是有 0.2% 的概率误差会超过 0.1%——通常发生在「阈值以下的元素碰上了阈值以上的元素、撞出后者的最小计数」时。样本很小的时候碰撞很少，这也是为什么小例子里结果看起来很准。
+
+**误差与内存量级**：
+
+```
+threshold = error * total_count
+```
+
+`total_count` 是草图里所有元素计数之和，从 `CMS.INFO` 的 `count` 字段取，它随每次自增而变，所以阈值也是动态的——低于当前阈值的结果直接丢。`error` 决定草图宽度 `w`，`probability` 决定哈希函数个数（深度 `d`）。`w = 2/error`：误差 0.1% 时宽度 2000，误差 0.01% 时宽度 20000，内存随之翻十倍。
+
+看一下阈值的效果。1000 个元素、每个计数约 500 的均匀分布，误差 0.1% 时阈值是 `0.001 * 500000 = 500`，等于把所有正常元素都划进「不可信」区间——这种分布根本不该用 CMS。把误差降到 0.01%，阈值 100，勉强可用，但草图要宽到 20000。
+
+换成高斯分布：800 个元素平均计数 500、合计 40 万，200 个元素平均计数 8000、合计 160 万，总共 200 万。0.1% 误差下阈值是 `0.001 * 2000000 = 2000`，稳稳落在 500 和 8000 之间，两类元素分得干干净净——这才是 CMS 的主场。
+
+加、更新、查都是 **O(1)**。
+
+**典型场景**：电商按天建一个 CMS，记录各商品的销量/销售额，从中挑出贡献最大的那些；销量占比很低的商品直接被当作噪声忽略。
+
+## t-digest
+
+**解决什么问题**：从数据流或大数据集里估算**分位数**（percentile），不必把所有观测值存下来再排序。比如「99% 的数据库操作延迟在多少毫秒以内」——精确做法要存下每个用户的延迟、排序、砍掉最后 1%，空间和计算都很贵，t-digest 正是为了省掉这两笔开销。
+
+它还能回答：
+
+- 数据流中比某个值小的观测占多大比例？
+- 有多少个值小于给定值？
+- 小于 p% 的观测里最大的是多少（即 p 分位值）？
+
+顺带还能算**截尾均值**（trimmed mean）：去掉两端的截断分位后剩下的均值，例如 0.1 截尾均值就是去掉最低 10% 和最高 10% 后的均值。
+
+**核心命令**：`TDIGEST.CREATE` 建草图（可带 `COMPRESSION`）、`TDIGEST.ADD` 加观测值；查询侧有 `TDIGEST.CDF` / `TDIGEST.RANK` / `TDIGEST.REVRANK`（按值求比例或排名），`TDIGEST.QUANTILE` / `TDIGEST.BYRANK` / `TDIGEST.BYREVRANK`（按比例或排名求值），`TDIGEST.TRIMMED_MEAN`（截尾均值），`TDIGEST.MERGE`（合并草图），`TDIGEST.MIN` / `TDIGEST.MAX` / `TDIGEST.INFO` / `TDIGEST.RESET`。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> TDIGEST.CREATE bikes:sales COMPRESSION 100
+OK
+> TDIGEST.ADD bikes:sales 21
+OK
+> TDIGEST.ADD bikes:sales 150 95 75 34
+OK
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.tdigest().create("bikes:sales", compression=100)   # True
+r.tdigest().add("bikes:sales", [21])                 # True
+r.tdigest().add("bikes:sales", [150, 95, 75, 34])    # True
+```
+
+</TabItem>
+</Tabs>
+
+`COMPRESSION` 就是精度与内存的旋钮，默认 **100**，值越大越准、占用越多。注意与其他几个结构不同，`TDIGEST.ADD` **不会**在 key 不存在时自动创建结构，得先 `CREATE`。有新观测就继续 `ADD`。
+
+按值求比例和排名：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> TDIGEST.CREATE racer_ages
+OK
+> TDIGEST.ADD racer_ages 45.88 44.2 58.03 19.76 39.84 69.28 50.97 25.41 19.27 85.71 42.63
+OK
+> TDIGEST.CDF racer_ages 50
+1) "0.6363636363636364"
+> TDIGEST.RANK racer_ages 50
+1) (integer) 7
+> TDIGEST.RANK racer_ages 50 40
+1) (integer) 7
+2) (integer) 4
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.tdigest().create("racer_ages")
+r.tdigest().add("racer_ages",
+                [45.88, 44.2, 58.03, 19.76, 39.84, 69.28,
+                 50.97, 25.41, 19.27, 85.71, 42.63])
+r.tdigest().cdf("racer_ages", [50])      # [0.6363636363636364]
+r.tdigest().rank("racer_ages", [50])     # [7]
+r.tdigest().rank("racer_ages", [50, 40]) # [7, 4]
+```
+
+</TabItem>
+</Tabs>
+
+`CDF` 给出的是「小于 X 的观测所占比例 + 等于 X 的观测数的一半」的估计。`RANK` 返回的是排名估计而不是比例，并且同样接受多个值。`TDIGEST.REVRANK` 与 `RANK` 相反，返回「大于给定值的观测数 + 等于给定值的观测数的一半」的估计。
+
+按比例或排名求值：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> TDIGEST.QUANTILE racer_ages .5
+1) "44.2"
+> TDIGEST.BYRANK racer_ages 4
+1) "42.63"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.tdigest().quantile("racer_ages", [0.5])   # [44.2]
+r.tdigest().byrank("racer_ages", [4])       # [42.63]
+```
+
+</TabItem>
+</Tabs>
+
+`TDIGEST.TRIMMED_MEAN key lowFraction highFraction` 取指定比例区间内的均值估计，用来「忽略离群值的平均」最顺手，比如 20 分位到 80 分位之间的均值。
+
+多个草图可以合并：`TDIGEST.MERGE destKey numKeys sourceKey... [COMPRESSION compression] [OVERRIDE]`。`destKey` 不存在就新建；已存在则把源草图的值并进去，要覆盖原内容加 `OVERRIDE`。典型用途是三台服务器的延迟分开采样，最后合并算整体 P90 / P95 / P99。
+
+`TDIGEST.MIN` / `TDIGEST.MAX` 是两个精确值（等价于 `BYRANK 0` 和 `BYREVRANK 0`），草图为空时返回 `nan`。
+
+**误差与内存**：精度由 `COMPRESSION` 控制，默认 100；它不是「固定误差百分比」那一类结构，而是把观测压缩成若干质心，压缩率越高、尾巴上的分位数越准、内存越多。相比存全量样本再排序，空间从 O(n) 降到与压缩参数相关的常数级。
+
+**典型场景**：监控系统的延迟分位数（P50 / P90 / P99）、「你的成绩超过了多少比例的玩家」这类排名反馈、网络流量异常检测（本秒包数是否超过历史 99%）、预警阈值的选取。
+
+## Top-K
+
+**解决什么问题**：从数据流里找出**排名最高的 K 个元素**。「最高」指附着的计数或分数最高，最常见的就是出现频次最高——正好用来抓热点。与 Count-min sketch 功能有重叠，但定位不同：CMS 回答「这个元素出现了多少次」，Top-K 直接回答「最热的是哪几个」。
+
+Redis 的实现基于 HeavyKeeper 算法，采用「**带指数衰减的计数**」策略：对小鼠流（小流量）有偏，对大象流（大流量）影响有限。内部用两个结构配合——一张存概率计数的哈希表（类似 CMS）加一个存 K 个最高计数元素的最小堆。相比 Sorted Set，内存只要一个零头；而且元素进出 Top-K 时还能拿到实时通知。
+
+**核心命令**：`TOPK.RESERVE` 初始化、`TOPK.ADD` 加元素、`TOPK.LIST` 列出当前榜单、`TOPK.QUERY` 判断元素是否在榜上。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> TOPK.RESERVE bikes:keywords 5 2000 7 0.925
+OK
+> TOPK.ADD bikes:keywords store seat handlebars handles pedals tires store seat
+1) (nil)
+2) (nil)
+3) (nil)
+4) (nil)
+5) (nil)
+6) "handlebars"
+7) (nil)
+8) (nil)
+> TOPK.LIST bikes:keywords
+1) "store"
+2) "seat"
+3) "pedals"
+4) "tires"
+5) "handles"
+> TOPK.QUERY bikes:keywords store handlebars
+1) (integer) 1
+2) (integer) 0
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.topk().reserve("bikes:keywords", 5, 2000, 7, 0.925)   # True
+r.topk().add("bikes:keywords",
+             ["store", "seat", "handlebars", "handles",
+              "pedals", "tires", "store", "seat"])
+# [None, None, None, None, None, 'handlebars', None, None]
+r.topk().list("bikes:keywords")
+# ['store', 'seat', 'pedals', 'tires', 'handles']
+r.topk().query("bikes:keywords", ["store", "handlebars"])  # [1, 0]
+```
+
+</TabItem>
+</Tabs>
+
+`TOPK.ADD` 可以一次加多个元素，返回值是**被挤出榜单的元素**：`pedals` 进来把 `handlebars` 顶了出去，于是第 6 个位置返回 `"handlebars"`；后面重复添加 `store`、`seat` 时它们本来就在榜上，返回 `nil`。这样就能动态感知元素的进出。
+
+建草图的形式是 `TOPK.RESERVE key k width depth decay_constant`，其中 `width`、`depth`、`decay_constant` 可以省略，默认分别是 **7、8、0.9**。
+
+**误差与内存**：参数只跟 K 有关，尺寸很好算：
+
+```
+width = k*log(k)
+depth = log(k)   # 但最小为 5
+```
+
+`decay_constant` 取 **0.9** 在很多场景下已被证明最优，但可以按业务试不同值。内存是 Sorted Set 方案的一小部分。
+
+插入是 O(K + depth) ≈ O(K)，查询是 O(K)；`TOPK.LIST` 是 O(K*log(k))，所以 K 不大时不必再额外维护一个 Set 或 Sorted Set，直接从 Top-K 里查就行。
+
+**典型场景**：过去 X 小时被提及最多的 K 个话题标签、当天阅读/播放量最高的 K 条新闻、DDoS 与流量异常检测（同一地址或同一 IP 的请求量是否突增）。
+
+## 怎么选
+
+| 想回答的问题 | 用哪个 | 是否核心内置 |
+| --- | --- | --- |
+| 有多少个不同的元素（去重计数） | HyperLogLog | 是 |
+| 这个元素在不在集合里 | Bloom filter | 否（RedisBloom） |
+| 在不在，而且需要删除 | Cuckoo filter | 否（RedisBloom） |
+| 这个元素出现了多少次 | Count-min sketch | 否（RedisBloom） |
+| 分位数 / 排名 / 截尾均值 | t-digest | 否（RedisBloom） |
+| 最热的 K 个是哪几个 | Top-K | 否（RedisBloom） |
+
+共同的注意点：结果都是估计值，**要么带着误差上下界用，要么只信足够大的量级**。CMS 的阈值、Bloom 的假阳性、t-digest 的压缩率，都是需要按业务调的参数，不是设完就忘的默认值。
+
+## 延伸阅读
+
+- [官方原文：Probabilistic](https://redis.io/docs/latest/develop/data-types/probabilistic/)
+- [HyperLogLog 命令清单](https://redis.io/docs/latest/commands/?group=hyperloglog)
+- [Bloom filter 命令清单](https://redis.io/docs/latest/commands/?group=bf)

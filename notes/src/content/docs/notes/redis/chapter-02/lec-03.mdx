@@ -1,0 +1,94 @@
+---
+title: "2.3 Bitfields：在一个字符串里打包多个整数"
+description: BITFIELD 按任意位宽读写整数，从无符号 1 位到有符号 63 位；原子读写与自增、#n 偏移语义、返回值，以及 O(n) 的复杂度。
+sidebar:
+  order: 3
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Bitfield（位域）让你**按任意位长**设置、自增和读取整数值：最小可以到无符号 1 位整数，最大到有符号 63 位整数。
+
+这些整数以二进制编码的形式存在 Redis 字符串里——所以它的底层还是 String，只是把同一个字符串切成若干定宽的段，每段当一个独立的整数用。
+
+关键是**原子性**：一次 `BITFIELD` 调用里的读写、自增是作为一个整体执行的。这使它适合做计数器一类需要「读-改-写」的数值场景，不用额外加锁。
+
+| 命令 | 作用 |
+| --- | --- |
+| `BITFIELD key GET u32 #0` | 读第 0 段（32 位无符号） |
+| `BITFIELD key SET u32 #0 1000` | 写第 0 段，返回该段旧值 |
+| `BITFIELD key INCRBY u32 #0 -50` | 对第 0 段做自增，返回新值 |
+
+几种参数规则：
+
+- 类型写成 `uN`（无符号）或 `iN`（有符号），N 是位宽。
+- 偏移写 `#n` 时，实际位偏移 = `n × 位宽`；不带 `#` 时偏移直接按**位**算。所以 `u32 #0`、`u32 #1` 分别落在第 0~31 位和第 32~63 位。
+- 同一条命令可以串多个子操作，返回一个数组，按顺序对应每个子操作的结果。
+
+## 示例
+
+场景：给若干自行车维护两个指标——当前价格和历史拥有者人数。每辆车用一个 key，每个指标占 32 位。
+
+一辆车的故事：最初价格 1000（偏移 0 处的计数器），还没有过主人。卖出后变成二手车，价格立刻下调，同时拥有者变成 1 人（偏移 1）。过了很久它成了经典款，原车主加价转手，于是价格和拥有者人数一起上涨。最后读一次当前的「价格 + 拥有者数」。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> BITFIELD bike:1:stats SET u32 #0 1000
+1) (integer) 0
+> BITFIELD bike:1:stats INCRBY u32 #0 -50 INCRBY u32 #1 1
+1) (integer) 950
+2) (integer) 1
+> BITFIELD bike:1:stats INCRBY u32 #0 500 INCRBY u32 #1 1
+1) (integer) 1450
+2) (integer) 2
+> BITFIELD bike:1:stats GET u32 #0 GET u32 #1
+1) (integer) 1450
+2) (integer) 2
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+import redis
+
+r = redis.Redis(host="localhost", port=6379)
+
+# redis-py 没有封装 BITFIELD，直接用 execute_command 发原始命令
+r.execute_command("BITFIELD", "bike:1:stats", "SET", "u32", "#0", 1000)
+# [0]
+
+r.execute_command("BITFIELD", "bike:1:stats",
+                  "INCRBY", "u32", "#0", -50,
+                  "INCRBY", "u32", "#1", 1)
+# [950, 1]
+
+r.execute_command("BITFIELD", "bike:1:stats",
+                  "INCRBY", "u32", "#0", 500,
+                  "INCRBY", "u32", "#1", 1)
+# [1450, 2]
+
+r.execute_command("BITFIELD", "bike:1:stats",
+                  "GET", "u32", "#0",
+                  "GET", "u32", "#1")
+# [1450, 2]
+```
+
+</TabItem>
+</Tabs>
+
+读返回值时注意三点：
+
+- `SET` 返回的是**旧值**（第一次是 0），不是写入的新值；
+- `INCRBY` 返回的是**自增后的值**，不是增量；
+- `GET` 只是读，不会把位域「声明」出来——位宽和偏移是否对得上，全靠你自己保持一致。
+
+例子里用 `u32` 却给了负增量 `-50`，能成立只因为 1000 − 50 = 950 仍是非负数。如果可能减到负数，就该用 `i32` 这类有符号类型，把符号位算进位宽里。
+
+## 性能
+
+`BITFIELD` 是 **O(n)**，n 是这次调用访问的计数器个数。所以把多个子操作塞进同一条命令，既省往返，也把原子性一次拿到——代价是这一条命令的执行时间随子操作数量线性增长。
+
+参考资料：[官方原文](https://redis.io/docs/latest/develop/data-types/bitfields/) · [BITFIELD 命令文档](https://redis.io/docs/latest/commands/bitfield/)。

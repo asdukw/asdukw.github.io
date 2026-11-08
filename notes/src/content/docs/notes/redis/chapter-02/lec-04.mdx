@@ -1,0 +1,438 @@
+---
+title: "2.4 Arrays：可索引的可变长序列"
+description: 按官方结构梳理 Redis Arrays：下标读写、长度与元素数、区间读取、顺序插入、环形缓冲、聚合与搜索、删除、内省、配置、性能与限制。
+sidebar:
+  order: 4
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+> **状态提醒**：Arrays 是 Redis 的新数据类型，官方文档明确标注目前处于 **preview（预览）阶段，行为可能变化**。生产环境请先确认你手上的 Redis 版本是否支持。
+
+Arrays 是**稀疏的、按下标寻址**的结构：它把整数下标（范围 `0` 到 `2⁶⁴−1`）映射到字符串值。和 List 不同，元素是按**下标**直接访问，而不是按序列中的位置；你可以在任意下标写入，Redis 不会为中间的空洞分配空间。
+
+这让它适合带时间戳的事件日志、流式测量的环形缓冲、滑动窗口分析这类「下标稀疏或下标很大」的场景。
+
+下文示例统一用 `redis-cli`；Python 侧因为这类新命令还没进入 redis-py 的专用方法，都用 `execute_command` 发原始命令。
+
+## 基本用法
+
+`ARSET` 从给定下标开始写一个或多个**连续**的值，`ARGET` 读单个下标。读一个未设置的下标返回 nil：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> ARSET events:1 0 "login" "click" "purchase"
+(integer) 3
+> ARGET events:1 0
+"login"
+> ARGET events:1 999
+(nil)
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+import redis
+
+r = redis.Redis(host="localhost", port=6379, decode_responses=True)
+
+r.execute_command("ARSET", "events:1", 0, "login", "click", "purchase")  # 3
+r.execute_command("ARGET", "events:1", 0)                               # 'login'
+r.execute_command("ARGET", "events:1", 999)                             # None
+```
+
+</TabItem>
+</Tabs>
+
+要写到**不连续**的任意下标，用 `ARMSET`；一次往返读多个下标，用 `ARMGET`：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> ARMSET metrics 0 "10" 5 "20" 100 "30"
+(integer) 3
+> ARMGET metrics 0 5 100 999
+1) "10"
+2) "20"
+3) "30"
+4) (nil)
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.execute_command("ARMSET", "metrics", 0, "10", 5, "20", 100, "30")  # 3
+r.execute_command("ARMGET", "metrics", 0, 5, 100, 999)               # ['10', '20', '30', None]
+```
+
+</TabItem>
+</Tabs>
+
+## 数组长度 vs 元素个数
+
+Arrays 有两个不同的「大小」：
+
+- `ARLEN` 返回**逻辑长度**：已设置的最大下标 + 1。
+- `ARCOUNT` 返回**非空元素**的个数。
+
+对稀疏数组来说，两者可能差得非常远：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> ARSET sparse 0 "a"
+(integer) 1
+> ARSET sparse 1000000 "b"
+(integer) 1
+> ARLEN sparse
+(integer) 1000001
+> ARCOUNT sparse
+(integer) 2
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.execute_command("ARSET", "sparse", 0, "a")
+r.execute_command("ARSET", "sparse", 1000000, "b")
+r.execute_command("ARLEN", "sparse")    # 1000001
+r.execute_command("ARCOUNT", "sparse")  # 2
+```
+
+</TabItem>
+</Tabs>
+
+两个元素之间隔着 100 万个空位，但实际存储只有 2 个值——稀疏编码不会为空洞买单。
+
+## 读取区间
+
+`ARGETRANGE` 按下标顺序返回区间内的**每一个位置**，空位以 nil 占位；把 `start` 和 `end` 反过来写就是反向遍历：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> ARMSET seq 0 "a" 1 "b" 3 "d"
+(integer) 3
+> ARGETRANGE seq 0 3
+1) "a"
+2) "b"
+3) (nil)
+4) "d"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.execute_command("ARMSET", "seq", 0, "a", 1, "b", 3, "d")  # 3
+r.execute_command("ARGETRANGE", "seq", 0, 3)                # ['a', 'b', None, 'd']
+```
+
+</TabItem>
+</Tabs>
+
+如果只想遍历**真正存在**的元素，还要连带拿到下标，用 `ARSCAN`：它跳过空位，返回「下标-值」对的数组，可选 `LIMIT` 限制返回条数：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> ARSCAN seq 0 3
+1) 1) (integer) 0
+   2) "a"
+2) 1) (integer) 1
+   2) "b"
+3) 1) (integer) 3
+   2) "d"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.execute_command("ARSCAN", "seq", 0, 3)
+# [[0, 'a'], [1, 'b'], [3, 'd']]
+```
+
+</TabItem>
+</Tabs>
+
+注意两者用途不同：`ARGETRANGE` 保证下标的连续语义（适合「第 N 到第 M 条记录」），`ARSCAN` 保证只返回有效数据（适合稀疏场景）。
+
+## 顺序插入
+
+`ARINSERT` 用一个内部游标追加值，每次调用后游标自动前移。`ARNEXT` 查看下一次插入会落在哪个下标，`ARSEEK` 重新定位游标：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> ARINSERT log "event1"
+(integer) 0
+> ARINSERT log "event2"
+(integer) 1
+> ARNEXT log
+(integer) 2
+> ARSEEK log 10
+(integer) 1
+> ARINSERT log "event3"
+(integer) 10
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.execute_command("ARINSERT", "log", "event1")  # 0
+r.execute_command("ARINSERT", "log", "event2")  # 1
+r.execute_command("ARNEXT", "log")              # 2
+r.execute_command("ARSEEK", "log", 10)          # 1
+r.execute_command("ARINSERT", "log", "event3")  # 10
+```
+
+</TabItem>
+</Tabs>
+
+命令返回值就是**实际写入的下标**，比 List 的 `RPUSH` 更好对账。`ARSEEK` 之后可以把游标挪到任意位置继续追加，中间的空洞不会被分配。
+
+## 环形缓冲模式
+
+`ARRING` 把数组变成一个**固定大小的循环缓冲**。每次调用把值写到 `insert_idx % size`，窗口满了就绕回下标 `0`，覆盖最老的一条：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> ARRING readings 3 "v0"
+(integer) 0
+> ARRING readings 3 "v1"
+(integer) 1
+> ARRING readings 3 "v2"
+(integer) 2
+> ARRING readings 3 "v3"
+(integer) 0
+> ARGET readings 0
+"v3"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+for i, v in enumerate(["v0", "v1", "v2", "v3"]):
+    idx = r.execute_command("ARRING", "readings", 3, v)
+    print(i, idx)   # 0 0 / 1 1 / 2 2 / 3 0
+
+r.execute_command("ARGET", "readings", 0)   # 'v3'
+```
+
+</TabItem>
+</Tabs>
+
+`ARLASTITEMS` 按**时间顺序**取最近插入的 N 个元素，加 `REV` 反转顺序：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> ARLASTITEMS readings 3
+1) "v1"
+2) "v2"
+3) "v3"
+> ARLASTITEMS readings 3 REV
+1) "v3"
+2) "v2"
+3) "v1"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.execute_command("ARLASTITEMS", "readings", 3)        # ['v1', 'v2', 'v3']
+r.execute_command("ARLASTITEMS", "readings", 3, "REV") # ['v3', 'v2', 'v1']
+```
+
+</TabItem>
+</Tabs>
+
+这正是「最近 N 条」类需求的常用形态：定长、无淘汰逻辑、写入 O(1)。
+
+## 聚合操作
+
+`AROP` 对一段连续区间做**单趟遍历**的聚合：
+
+| 操作 | 含义 |
+|------|------|
+| `SUM` | 数值求和 |
+| `MIN` | 最小数值 |
+| `MAX` | 最大数值 |
+| `AND` / `OR` / `XOR` | 对整数值做位运算 |
+| `MATCH value` | 等于 `value` 的元素个数 |
+| `USED` | 区间内非空元素个数 |
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> ARMSET scores 0 "10" 1 "20" 2 "30"
+(integer) 3
+> AROP scores 0 2 SUM
+"60"
+> AROP scores 0 2 MAX
+"30"
+> AROP scores 0 2 MATCH "10"
+(integer) 1
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.execute_command("ARMSET", "scores", 0, "10", 1, "20", 2, "30")  # 3
+r.execute_command("AROP", "scores", 0, 2, "SUM")    # '60'
+r.execute_command("AROP", "scores", 0, 2, "MAX")    # '30'
+r.execute_command("AROP", "scores", 0, 2, "MATCH", "10")  # 1
+```
+
+</TabItem>
+</Tabs>
+
+注意 `SUM` / `MAX` 返回的是**字符串**（例如 `"60"`），而 `MATCH` / `USED` 返回整数——两者在客户端里类型不同，别直接混用。
+
+## 搜索元素
+
+`ARGREP` 在区间内按一个或多个**文本谓词**查找元素，返回命中下标，空位自动跳过。支持四种谓词形式：
+
+- `EXACT`：完全相等
+- `MATCH`：子串匹配
+- `GLOB`：与 `SCAN MATCH` 相同的通配符语法
+- `RE`：正则表达式
+
+多个谓词默认按 `OR` 组合，加 `AND` 选项则要求同时满足。`NOCASE` 忽略大小写，`WITHVALUES` 连同值一起返回，`LIMIT` 限制命中数量。
+
+典型的用法是「每行一个元素」的日志文本：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> DEL log
+(integer) 1
+> ARMSET log 0 "boot: ok" 1 "warn: disk" 2 "ERROR: cpu" 3 "info: ready" 4 "error: net"
+(integer) 5
+> ARGREP log - + MATCH "error" NOCASE
+1) (integer) 2
+2) (integer) 4
+> ARGREP log 0 4 GLOB "warn:*" OR GLOB "error:*" WITHVALUES
+1) 1) (integer) 1
+   2) "warn: disk"
+2) 1) (integer) 4
+   2) "error: net"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.delete("log")
+r.execute_command(
+    "ARMSET", "log",
+    0, "boot: ok", 1, "warn: disk", 2, "ERROR: cpu", 3, "info: ready", 4, "error: net",
+)  # 5
+
+r.execute_command("ARGREP", "log", "-", "+", "MATCH", "error", "NOCASE")  # [2, 4]
+
+r.execute_command(
+    "ARGREP", "log", 0, 4,
+    "GLOB", "warn:*", "OR", "GLOB", "error:*", "WITHVALUES",
+)  # [[1, 'warn: disk'], [4, 'error: net']]
+```
+
+</TabItem>
+</Tabs>
+
+特殊下标 `-` 和 `+` 分别表示数组的第一个下标和最后一个下标。和环形缓冲配合，就能让一个定长数组保存最近 N 行日志并原地检索。
+
+## 删除元素
+
+`ARDEL` 按下标删一个或多个元素，返回**实际删除**的个数；`ARDELRANGE` 删除整个下标区间，同样支持把 `start` / `end` 反过来写：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> ARDEL scores 1
+(integer) 1
+> ARDELRANGE scores 0 2
+(integer) 2
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.execute_command("ARDEL", "scores", 1)         # 1
+r.execute_command("ARDELRANGE", "scores", 0, 2) # 2
+```
+
+</TabItem>
+</Tabs>
+
+删掉最后一个元素时，整个 key 也会被移除——不会留下一个空数组。
+
+## 内省
+
+`ARINFO` 返回数组内部结构的元信息：逻辑长度、元素个数、下一次插入的下标。加 `FULL` 还能看到每个切片（slice）的统计，比如填充率、稠密切片与稀疏切片各自的数量：
+
+```bash
+> ARINFO readings
+ 1) "len"
+ 2) (integer) 3
+ 3) "count"
+ 4) (integer) 3
+ 5) "next-insert-index"
+ 6) (integer) 0
+...
+```
+
+排查「内存为什么涨」或「环形缓冲绕到哪了」时，比 `ARLEN` / `ARCOUNT` 信息更全。该命令没有对应 CLI 之外的特例，Python 里同样 `r.execute_command("ARINFO", "readings")`。
+
+## 配置
+
+以下参数影响数组的行为：
+
+- `array-slice-size`
+- `array-sparse-kmax`
+- `array-sparse-kmin`
+
+细节以官方配置页为准。这几个参数控制的是内部分片与稀疏编码的阈值，一般不需要动；只有在可观测到内存或延迟异常时才需要调整。
+
+## 性能
+
+大多数数组命令是 **O(1)**：`ARSET`、`ARGET`、`ARDEL`、`ARINSERT`、`ARNEXT`、`ARSEEK`、`ARCOUNT`、`ARLEN`。
+
+会触及 N 个元素的命令是 **O(N)**：`ARGETRANGE`、`ARSCAN`、`ARDELRANGE`、`AROP`、`ARLASTITEMS`。
+
+底层的分片数组编码对稠密和稀疏访问都做了优化，所以下标间隔很大时内存占用依然很小——这是它相对「用 List 硬凑」的核心优势。
+
+## 替代方案
+
+Arrays 是补充，不是替代：
+
+- 需要在两端 push/pop，或要在已有元素**之间**插入 → Redis List。
+- 按字段名而不是数字下标寻址 → Redis Hash。
+- 需要带消费者组和确认机制的追加日志 → Redis Stream。
+
+## 限制
+
+- `ARGETRANGE` 单次调用硬性上限 **1,000,000 个元素**，防止误读超大区间。
+- Arrays **不支持** Active-Active（多活）数据库。

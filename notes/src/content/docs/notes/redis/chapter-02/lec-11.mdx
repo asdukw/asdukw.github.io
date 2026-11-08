@@ -1,0 +1,312 @@
+---
+title: 2.11 Sorted sets：带分数的有序集合
+description: 按官方文档结构梳理 Redis 有序集合：score 排序与字典序 tie-break、ZRANGE BYSCORE/BYLEX 的区间语义、ZADD 的 GT/LT/NX/XX 选项、排行榜与 O(log(n)) 复杂度。
+sidebar:
+  order: 11
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Sorted set 是**成员唯一**、但按关联的 **score（浮点数）排序**的字符串集合。可以把它理解成 Set 和 Hash 的混合体：成员像 Set 一样不可重复，每个成员又像 Hash 的字段一样映射到一个值（score）。
+
+和 Set 里「无序」不同，有序集合的**顺序是数据结构本身的属性**，不是查询时才排出来的。排序规则只有两条：
+
+1. score 不同时，按 score 升序比较；
+2. score 完全相同时，按成员字符串的**字典序**比较（成员唯一，所以不会相等）。
+
+常见用途是**排行榜**（海量在线游戏里的高分榜）和**限流器**（用有序集合实现滑动窗口限流，挡住过量的 API 请求）。
+
+`ZADD` 和 `SADD` 很像，只是在成员前面多了一个 score 参数，并且支持一次写多对 score-member：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> ZADD racer_scores 10 "Norem"
+(integer) 1
+> ZADD racer_scores 12 "Castilla"
+(integer) 1
+> ZADD racer_scores 8 "Sam-Bodden" 10 "Royce" 6 "Ford" 14 "Prickett"
+(integer) 4
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+import redis
+
+r = redis.Redis(host="localhost", port=6379, decode_responses=True)
+
+r.zadd("racer_scores", {"Norem": 10})        # 1
+r.zadd("racer_scores", {"Castilla": 12})     # 1
+r.zadd("racer_scores", {"Sam-Bodden": 8, "Royce": 10, "Ford": 6, "Prickett": 14})   # 4
+```
+
+</TabItem>
+</Tabs>
+
+实现上，有序集合是**跳表 + 哈希表**的双端口结构，所以每次插入是 **O(log(N))**；好处是取有序结果时 Redis 什么都不用做——它本来就是有序的。`ZRANGE` 默认从低到高，加 `REV` 变成从高到低：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> ZRANGE racer_scores 0 -1
+1) "Ford"
+2) "Sam-Bodden"
+3) "Norem"
+4) "Royce"
+5) "Castilla"
+6) "Prickett"
+> ZRANGE racer_scores 0 -1 REV
+1) "Prickett"
+2) "Castilla"
+3) "Royce"
+4) "Norem"
+5) "Sam-Bodden"
+6) "Ford"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.zrange("racer_scores", 0, -1)                  # 升序
+r.zrange("racer_scores", 0, -1, desc=True)       # 降序
+```
+
+</TabItem>
+</Tabs>
+
+`0` 和 `-1` 表示从第一个到最后一个元素，和 `LRANGE` 的索引语义一致。想把 score 一起取出来就加 `WITHSCORES`：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> ZRANGE racer_scores 0 -1 withscores
+ 1) "Ford"
+ 2) "6"
+ 3) "Sam-Bodden"
+ 4) "8"
+ 5) "Norem"
+ 6) "10"
+ 7) "Royce"
+ 8) "10"
+ 9) "Castilla"
+10) "12"
+11) "Prickett"
+12) "14"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.zrange("racer_scores", 0, -1, withscores=True)   # [('Ford', 6.0), ...]
+```
+
+</TabItem>
+</Tabs>
+
+## 区间操作
+
+有序集合真正的用处是按**区间**取数据。取 10 分及以下的选手，用 `ZRANGE ... BYSCORE`：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> ZRANGE racer_scores -inf 10 BYSCORE
+1) "Ford"
+2) "Sam-Bodden"
+3) "Norem"
+4) "Royce"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.zrange("racer_scores", "-inf", 10, byscore=True)   # 4 个成员
+```
+
+</TabItem>
+</Tabs>
+
+这里两端都是**闭区间**：`-inf` 到 10 都包含。区间边界的写法有三种：
+
+- 默认（直接写数字）是闭区间，`10` 表示 score ≤ 10；
+- 前面加 `(` 变成开区间，例如 `(10` 表示 score > 10；
+- 无穷用 `-inf` / `+inf` 表示。
+
+同样的语义也适用于专门的区间命令 `ZRANGEBYSCORE`（等价于 `ZRANGE ... BYSCORE`），按分数取范围是它的主业。
+
+删除可以按成员（`ZREM`）也可以按区间（`ZREMRANGEBYSCORE`）。下面先删掉 Castilla，再删掉所有严格小于 10 分的选手：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> ZREM racer_scores "Castilla"
+(integer) 1
+> ZREMRANGEBYSCORE racer_scores -inf 9
+(integer) 2
+> ZRANGE racer_scores 0 -1
+1) "Norem"
+2) "Royce"
+3) "Prickett"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.zrem("racer_scores", "Castilla")              # 1
+r.zremrangebyscore("racer_scores", "-inf", 9)   # 2
+r.zrange("racer_scores", 0, -1)                 # ['Norem', 'Royce', 'Prickett']
+```
+
+</TabItem>
+</Tabs>
+
+`ZREMRANGEBYSCORE` 返回被删掉的元素个数。名字不算好听，但很实用。
+
+另一个高频操作是**取排名**：问某个成员在有序集合里排第几。`ZRANK` 按升序给名次，`ZREVRANK` 按降序给名次（`Norem` 和 `Royce` 同为 10 分，按字典序 `Norem` 在前）：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+# 重建剩下的三名选手，让这段示例能独立运行
+> DEL racer_scores
+(integer) 1
+> ZADD racer_scores 10 "Norem" 10 "Royce" 14 "Prickett"
+(integer) 3
+> ZRANK racer_scores "Norem"
+(integer) 0
+> ZREVRANK racer_scores "Norem"
+(integer) 2
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.delete("racer_scores")
+r.zadd("racer_scores", {"Norem": 10, "Royce": 10, "Prickett": 14})
+r.zrank("racer_scores", "Norem")      # 0
+r.zrevrank("racer_scores", "Norem")   # 2
+```
+
+</TabItem>
+</Tabs>
+
+## 字典序
+
+从 Redis 2.8 起，有序集合支持**按字典序取区间**，前提是集合里所有成员用**同一个 score** 插入。比较用的是 C 的 `memcmp`，因此不涉及任何 collation 规则——同一个集合在任何 Redis 实例上返回结果都相同。
+
+相关的命令是 `ZRANGE ... BYLEX`（加 `REV` 反向）、`ZREMRANGEBYLEX` 和 `ZLEXCOUNT`；专门的 `ZRANGEBYLEX` 与 `ZRANGE ... BYLEX` 语义相同。因为有序集合「score 相同则按字典序」的排序规则，score 全为 0 时它们本来就已经是字典序：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> ZADD racer_scores 0 "Norem" 0 "Sam-Bodden" 0 "Royce" 0 "Castilla" 0 "Prickett" 0 "Ford"
+(integer) 3
+> ZRANGE racer_scores 0 -1
+1) "Castilla"
+2) "Ford"
+3) "Norem"
+4) "Prickett"
+5) "Royce"
+6) "Sam-Bodden"
+> ZRANGE racer_scores [A [L BYLEX
+1) "Castilla"
+2) "Ford"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.zadd("racer_scores", {"Norem": 0, "Sam-Bodden": 0, "Royce": 0,
+                        "Castilla": 0, "Prickett": 0, "Ford": 0})
+r.zrange("racer_scores", 0, -1)
+r.zrange("racer_scores", "[A", "[L", bylex=True)   # ['Castilla', 'Ford']
+```
+
+</TabItem>
+</Tabs>
+
+字典序区间的边界写法：
+
+- `[` 开头是**闭区间**（包含该字符串），如 `[A`；
+- `(` 开头是**开区间**（不包含），如 `(A`；
+- 正无穷和负无穷分别用 `+` 和 `-` 两个字符串表示。
+
+**关键前提**：字典序查询只在所有成员 score 相同时才有意义。一旦 score 不一致，排序首先按 score 走，BYLEX 的语义就没有保障了。
+
+这个特性让有序集合可以当作**通用索引**用。比如要按 128 位无符号整数索引元素：把所有元素以相同 score（比如 0）插入，并在成员前拼上 **16 字节的大端序数字前缀**。大端序字节在按原始字节做字典序比较时，恰好等价于按数值大小比较，于是可以直接在 128 位空间里取区间，取出结果时再丢掉前缀即可拿到原值。
+
+另外，**score 可以随时更新**：对已在集合里的成员再次 `ZADD` 会更新它的 score 和位置，复杂度是 **O(log(N))**。所以有序集合很能扛高频更新，这也是排行榜成为它的经典用例的原因——既能按分数取 Top N，又能拿单个用户的排名（「你在这里排第 4932 名」）。
+
+## 示例
+
+排行榜有两种更新方式：**知道新分数**，直接 `ZADD` 覆盖；**只想在原分数上加**，用 `ZINCRBY`。注意 `ZADD` 对已存在的成员返回 0（但分数已被更新），而 `ZINCRBY` 返回新的分数：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> ZADD racer_scores 100 "Wood"
+(integer) 1
+> ZADD racer_scores 100 "Henshaw"
+(integer) 1
+> ZADD racer_scores 150 "Henshaw"
+(integer) 0
+> ZINCRBY racer_scores 50 "Wood"
+"150"
+> ZINCRBY racer_scores 50 "Henshaw"
+"200"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.zadd("racer_scores", {"Wood": 100})       # 1
+r.zadd("racer_scores", {"Henshaw": 100})    # 1
+r.zadd("racer_scores", {"Henshaw": 150})    # 0，更新了已存在成员的分数
+r.zincrby("racer_scores", 50, "Wood")       # 150.0
+r.zincrby("racer_scores", 50, "Henshaw")    # 200.0
+```
+
+</TabItem>
+</Tabs>
+
+`ZADD` 还带几个条件选项，用来让「写分数」这件事带上前置判断：
+
+- `NX`：只新增，不更新已存在的成员；
+- `XX`：只更新已存在的成员，不新增；
+- `GT`：仅在**新分数更大**时更新（不会阻止新增成员）；
+- `LT`：仅在**新分数更小**时更新（同样只对新分数生效，不阻止新增）。
+
+`NX` 和 `XX` 互斥，`GT` / `LT` 也互斥；`NX` 与 `GT` / `LT` 不能同时使用。典型场景是「只允许涨分」的分数表用 `GT`，「只允许降分」的延迟指标用 `LT`。
+
+## 性能
+
+有序集合的大多数操作是 **O(log(n))**，`n` 是成员数量。
+
+需要留意的是 `ZRANGE` **返回大量结果**时（比如几万条以上）：它的复杂度是 **O(log(n) + m)**，`m` 是返回的元素个数。返回多少就得搬多少，所以分页比一次性全取更稳。
+
+## 替代方案
+
+有序集合有时被拿来给其他 Redis 数据结构做索引。如果需求是真的**索引与查询**，应该用 **JSON** 数据类型配合 **Redis Search** 的检索能力。
+
+## 延伸阅读
+
+- [Redis Sorted Sets Explained](https://www.youtube.com/watch?v=MUKlxdBQZ7g)：轻松入门有序集合。
+- [Redis University 的 RU101](https://university.redis.com/courses/ru101/)：系统讲有序集合的部分。
+- [官方原文](https://redis.io/docs/latest/develop/data-types/sorted-sets/)

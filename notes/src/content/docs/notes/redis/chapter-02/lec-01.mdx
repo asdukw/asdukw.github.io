@@ -1,26 +1,17 @@
 ---
-title: 2.1 String：最基础的字节串
-description: Redis 唯一没有结构的类型：存储模型、SET/GET 与常用选项、原子计数器、位操作、512 MB 上限与 int/embstr/raw 三种底层编码。
+title: 2.1 Strings：最基础的字节串
+description: 按官方文档结构梳理 Redis 字符串：SET/GET 与选项、8.4 的值比较、原子计数器、512 MB 上限、位操作、性能与替代方案。
 sidebar:
   order: 1
 ---
 
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 
-## 一句话定位
+Redis 的字符串存的是**字节序列**——可以是文本、序列化后的对象（JSON / MessagePack），也可以是二进制数组，比如一张 jpeg 图片。它是最简单的一种值类型，常被用来做缓存，但除此之外还支持计数器和位运算。
 
-String 是 Redis 里**唯一没有内置结构**的类型：一个 key 映射到一串字节。这串字节可以是文本、序列化后的对象（JSON / MessagePack）、甚至一张图片的二进制——Redis 不关心内容是什么。
+因为 Redis 的 key 本身就是字符串，所以「字符串 → 字符串」的映射是它最原始的形态。
 
-正因为它太基础，很多「看起来是别的类型」的东西底层都是 String：Bitmap 本质是位串，HyperLogLog 本质也是 String。所以把 String 吃透，后面几个类型会轻很多。
-
-## 存储模型与边界
-
-- **二进制安全**：value 是字节序列，Redis 不对它做任何编码假设，也不按字符串终结符截断。
-- **大小上限 512 MB**：单个 value 最大 512 MB。这是硬限制，不是建议。
-- **key 本身也是 string**：Redis 的 key 就是字符串，所以 String 类型其实是「string → string」的映射。
-- **`SET` 是赋值，不看旧类型**：哪怕 key 上原来存的是 hash，`SET` 也会直接覆盖成 string。它不报错、不合并。
-
-## SET / GET：一切的起点
+## 基础用法
 
 <Tabs syncKey="redis-client">
 <TabItem label="redis-cli">
@@ -47,50 +38,44 @@ r.get("bike:1")             # 'Deimos'
 </TabItem>
 </Tabs>
 
-Python 侧统一用 redis-py（`pip install redis`）。上面这段之后，示例都沿用这个 `r`；`decode_responses=True` 是为了拿到 `str` 而不是 `bytes`，否则 `get` 会返回 `b'Deimos'`。
+Python 侧统一用 redis-py（`pip install redis`），后续示例沿用这个 `r`。`decode_responses=True` 是为了拿到 `str` 而不是 `bytes`。
 
-`SET` 真正有用的地方在它的选项上，日常八成场景靠这几个组合就够了：
+注意 `SET` 是**赋值**：哪怕 key 上原来存的是别的类型，也会被直接覆盖，不报错、不合并。
 
-| 选项 | 作用 | 典型用途 |
-| --- | --- | --- |
-| `EX` / `PX` | 过期时间（秒 / 毫秒） | 缓存、验证码 |
-| `EXAT` / `PXAT` | 过期到某个绝对时间戳 | 到期时间固定的场景 |
-| `KEEPTTL` | 保留 key 原有的 TTL | 更新值但不想重置过期 |
-| `NX` | **不存在**才设置 | 分布式锁、幂等占位 |
-| `XX` | **存在**才设置 | 只更新已存在的 key |
-| `GET` | 返回设置前的旧值（6.2+） | 需要读取旧值又不想多一次 RTT |
+### SET 的选项
 
-最经典的组合——用 `SET NX PX` 抢锁：
+`SET` 的附加参数决定了它的条件语义，日常最重要的是 `NX` 和 `XX`：
 
 <Tabs syncKey="redis-client">
 <TabItem label="redis-cli">
 
 ```bash
-> SET lock:order:1001 <random-token> NX PX 30000
-OK          # 抢到锁，30 秒后自动过期
-> SET lock:order:1001 <other-token> NX PX 30000
-(nil)       # 已被别人持有，设置失败
+# 先把它复原，让例子可以单独运行
+> SET bike:1 Deimos
+OK
+> SET bike:1 bike NX     # key 已存在，NX 失败
+(nil)
+> SET bike:1 bike XX     # key 存在，XX 成功
+OK
 ```
 
 </TabItem>
 <TabItem label="Python">
 
 ```python
-# set(..., nx=True, px=30000) 全是一次往返，别拆成 SETNX + EXPIRE
-r.set("lock:order:1001", "b7f6a1", nx=True, px=30000)        # True
-r.set("lock:order:1001", "other-token", nx=True, px=30000)   # None
+r.set("bike:1", "Deimos")
+r.set("bike:1", "bike", nx=True)   # None，因为 key 已存在
+r.set("bike:1", "bike", xx=True)   # True，因为 key 存在
 ```
 
 </TabItem>
 </Tabs>
 
-:::caution
-`SET NX` 拿到锁只解决「谁能进」；安全释放锁还需要「只删自己那把」，否则会误删别人的锁。传统做法是用 Lua 比较 token 再删。Redis 8.4 起可以用下面讲的 `IFEQ` + `DELEX` 原生实现。
-:::
+单个 value 的大小上限是 **512 MB**，这是硬限制。
 
-### 8.4 新增：值比较（CAS / CAD）
+### 8.4 新增：写前比较（CAS / CAD）
 
-`SET` 的多组选项从 Redis 8.4 起支持比较当前值，这就是 compare-and-swap：
+从 Redis 8.4 起，`SET` 可以在写入前检查 key 当前的值。`IFEQ` 表示「当前值等于这个才写」，也就是 compare-and-swap；`DELEX` 把同样的判断用到删除上，即 compare-and-delete：
 
 <Tabs syncKey="redis-client">
 <TabItem label="redis-cli">
@@ -98,78 +83,75 @@ r.set("lock:order:1001", "other-token", nx=True, px=30000)   # None
 ```bash
 > SET bike:1 Deimos
 OK
-> SET bike:1 Ares IFEQ Deimos     # 当前值等于 Deimos 才写
+> SET bike:1 Ares IFEQ Deimos    # 值没变，写入成功
 OK
-> SET bike:1 Zeus IFEQ Deimos     # 值已变成 Ares，条件不满足
+> SET bike:1 Zeus IFEQ Deimos    # 值已是 Ares，条件不满足
 (nil)
 > GET bike:1
 "Ares"
+> DELEX bike:1 IFEQ Deimos       # 当前值是 Ares，删不掉
+(integer) 0
+> DELEX bike:1 IFEQ Ares
+(integer) 1
 ```
 
 </TabItem>
 <TabItem label="Python">
 
 ```python
-# redis-py 还没有封装 IFEQ，直接发原始命令
+# redis-py 8.x 已直接支持 ifeq / delex；旧版本可用 execute_command 发原始命令
 r.set("bike:1", "Deimos")
-r.execute_command("SET", "bike:1", "Ares", "IFEQ", "Deimos")   # 'OK'
-r.execute_command("SET", "bike:1", "Zeus", "IFEQ", "Deimos")   # None
-r.get("bike:1")                                                # 'Ares'
+r.set("bike:1", "Ares", ifeq="Deimos")    # True
+r.set("bike:1", "Zeus", ifeq="Deimos")    # None
+r.get("bike:1")                           # 'Ares'
+r.delex("bike:1", ifeq="Deimos")          # 0
+r.delex("bike:1", ifeq="Ares")            # 1
 ```
 
 </TabItem>
 </Tabs>
 
-对应的删除是 `DELEX`（compare-and-delete），比较摘要则用 `IFDEQ` / `IFDNE`，配合 `DIGEST` 取 XXH3 哈希。这些都需要**Redis 8.4+**，低版本别照抄。
+`IFNE` 是反向判断；`IFDEQ` / `IFDNE` 比较的不是原值而是值的哈希摘要，摘要用 `DIGEST` 取（XXH3）。这几个都需要 **Redis 8.4+**。
 
-## 其他常用命令族
+### 其他常用命令
 
-除了 `SET` / `GET`，String 还有一堆命令，按用途记：
+`GETSET` 一次性完成「写新值 + 返回旧值」。典型场景：用 `INCR` 累计访问量，每小时结算一次并归零，又不想丢掉期间的增量——`GETSET key 0` 正好。
 
-| 用途 | 命令 | 备注 |
-| --- | --- | --- |
-| 只在不存在时设 | `SETNX`、`SET ... NX` | `SETNX` 是旧写法，功能被 `SET` 选项覆盖 |
-| 带过期设置 | `SETEX` / `PSETEX`、`SET ... EX` | 同理，新代码优先用 `SET` 选项 |
-| 读旧值并写新值 | `GETSET`、`SET ... GET` | `GETSET` 是原子版「改值并拿旧值」 |
-| 读后删 / 读后改 TTL | `GETDEL`、`GETEX` | 6.2+ |
-| 批量读写 | `MSET` / `MGET` | 减少网络往返，O(N) |
-| 拼接 / 长度 / 截取 | `APPEND`、`STRLEN`、`GETRANGE`/`SUBSTR`、`SETRANGE` | 见「性能」一节 |
-| 位操作 | `SETBIT`、`GETBIT`、`BITCOUNT`、`BITOP`、`BITFIELD` | 见下 |
-
-`GETSET` 有个常见用法：假设用 `INCR` 统计访问量，想每小时取一次数并归零，又不想丢计数——`GETSET key 0` 一次性「读出旧值、写回 0」：
+`MSET` / `MGET` 则用来在一次往返里读写多个 key：
 
 <Tabs syncKey="redis-client">
 <TabItem label="redis-cli">
 
 ```bash
-> SET visits 42
-> GETSET visits 0
-"42"     # 拿到本周期累计值
-> GET visits
-"0"
+> MSET bike:1 "Deimos" bike:2 "Ares" bike:3 "Vanth"
+OK
+> MGET bike:1 bike:2 bike:3
+1) "Deimos"
+2) "Ares"
+3) "Vanth"
 ```
 
 </TabItem>
 <TabItem label="Python">
 
 ```python
-r.set("visits", 42)
-r.set("visits", 0, get=True)   # '42' —— 读出旧值并写回 0
-r.get("visits")                # '0'
+r.mset({"bike:1": "Deimos", "bike:2": "Ares", "bike:3": "Vanth"})
+r.mget(["bike:1", "bike:2", "bike:3"])   # ['Deimos', 'Ares', 'Vanth']
 ```
 
 </TabItem>
 </Tabs>
 
-## String 当计数器
+## 计数器
 
-只要 value 是整数，就能用 `INCR` / `INCRBY` / `DECR` / `DECRBY` 做**原子**加减，key 不存在时按 0 起算：
+字符串只要能解析成整数，就能用 `INCR` / `INCRBY` / `DECR` / `DECRBY` 做原子加减；key 不存在时按 0 起算。
 
 <Tabs syncKey="redis-client">
 <TabItem label="redis-cli">
 
 ```bash
 > SET total_crashes 0
+OK
 > INCR total_crashes
 (integer) 1
 > INCRBY total_crashes 10
@@ -188,84 +170,29 @@ r.incrby("total_crashes", 10)   # 11
 </TabItem>
 </Tabs>
 
-浮点用 `INCRBYFLOAT`。原子性意味着并发下也不会丢自增，这是拿 Redis 做访问计数、库存、限流的基础：
+「原子」在这里的含义很具体：多个客户端同时对同一个 key 执行 `INCR`，不会出现「都读到 10、都写回 11」的竞争。读-加-写这一串在 Redis 里是作为一个整体执行的。
 
-<Tabs syncKey="redis-client">
-<TabItem label="redis-cli">
+## 上限
 
-```bash
-# 简单的每分钟限流：计数器 + 过期
-> INCR rate:user:42:2026110718
-> EXPIRE rate:user:42:2026110718 60 NX   # 只在第一次设置 TTL
-```
+单个字符串最大 **512 MB**。这是硬上限，不是建议值。
 
-</TabItem>
-<TabItem label="Python">
+## 位与位域操作
 
-```python
-key = "rate:user:42:2026110718"
-r.incr(key)
-r.expire(key, 60, nx=True)   # 只在第一次设置 TTL，避免每次重置窗口
+字符串可以按位操作，也可以在一个字符串里切出多个整数位段。这两块内容各自成篇：
 
-# 两条命令想一次往返，可以放进 pipeline：
-# pipe = r.pipeline()
-# pipe.incr(key)
-# pipe.expire(key, 60, nx=True)
-# pipe.execute()
-```
-
-</TabItem>
-</Tabs>
-
-:::note
-计数器一旦被 `SET` 成非数字，`INCR` 会直接报错；反过来 `INCR`、`APPEND` 这类写操作会让内部编码从 `int`/`embstr` 退化成 `raw`（见下文）。所以别把「同一个 key 一会儿当计数器、一会儿当普通字符串改」当成好习惯。
-:::
-
-## 位操作与 bitfield
-
-String 可以按**位**操作：`SETBIT` / `GETBIT` 读写单个位，`BITCOUNT` 数 1，`BITPOS` 找第一个 0/1，`BITOP` 做位级交并差。Bitmap（签到、UV 去重）就是把这个能力用满。另外 `BITFIELD` 可以在一个 string 里切出多个整数位段。
-
-这部分内容不少，后面「Bitmap」和「bitfield」会单独讲，这里先知道**它们都在 String 上**即可。
+- 位图（Bitmaps）：`SETBIT` / `GETBIT` / `BITCOUNT` / `BITOP`，用于签到、UV 去重这类场景。
+- 位域（Bitfields）：`BITFIELD`，在一个字符串里读写任意位宽和偏移的整数。
 
 ## 性能
 
-- 绝大多数操作 **O(1)**。
-- 要小心 `SUBSTR` / `GETRANGE` / `SETRANGE`：这几个是随机访问，**可能 O(n)**，在超大 string 上频繁调用会出问题。
-- `APPEND` 摊还 O(1)（Redis 动态字符串会预留空间翻倍）。
-- `MGET` / `MSET` 是 O(N)，但省的是往返次数，通常比循环单条更划算。
+绝大多数字符串操作是 **O(1)**。需要小心的是 `SUBSTR`、`GETRANGE`、`SETRANGE`——它们做随机访问，复杂度可能退化成 **O(n)**，在超大字符串上频繁调用会出问题。
 
-## 底层编码（补充，原页面没讲）
+## 替代方案
 
-String 在内部有三种编码，用 `OBJECT ENCODING key` 能看：
+如果你是把结构化数据整体序列化成一个字符串，读改任一字段都要整块取出再写回，这时更合适的是 [Hash](/notes/redis/chapter-02/lec-06/) 或 [JSON](/notes/redis/chapter-02/lec-07/)。
 
-| 编码 | 触发条件 | 特点 |
-| --- | --- | --- |
-| `int` | value 能解析成 64 位有符号整数 | 直接存整数，不额外建字符串对象 |
-| `embstr` | 长度 ≤ 44 字节 | 对象头和字符串一次分配，只读；一旦 `APPEND`/`SETRANGE` 会转成 `raw` |
-| `raw` | 长度 > 44 字节 | 普通 SDS（动态字符串） |
+## 延伸阅读
 
-实践含义：纯计数 key 落在 `int` 最省；短字符串（配置、标志、小 JSON）落在 `embstr` 省一次内存分配；但 `embstr` 只读，别对它频繁追加。
-
-:::caution
-编码是内部实现，版本之间可能变，**不要把它当 API 契约**写在业务逻辑里依赖。它只适合用来解释内存占用、做排查。
-:::
-
-## 什么时候不该用 String
-
-- 存结构化数据却整体序列化成一个 string：读改任一字段都要整块取出再写回，浪费带宽也容易并发覆盖——这种优先 `Hash` 或 `JSON`。
-- 需要集合成员关系或排序：用 `Set` / `Sorted Set`。
-- 但也要知道：String 是一切的兜底，理论上用 string + 应用层逻辑能模拟所有类型，代价（内存、服务端计算、并发正确性）得自己扛。这个取舍留到「数据类型选型」一章再展开。
-
-## 小结
-
-- String = 二进制安全的字节串，上限 512 MB；`SET` 是赋值，会无视旧类型直接覆盖。
-- 日常靠 `SET` 的 `EX/PX/NX/XX/GET/KEEPTTL` 选项，锁和幂等都用得上；8.4+ 还有 `IFEQ`/`DELEX` 做 CAS。
-- 计数器用 `INCR` 系列拿原子性；批量读写用 `MSET`/`MGET` 省 RTT。
-- 底层 `int`/`embstr`/`raw` 三编码，`OBJECT ENCODING` 可查，但别当契约。
-- 位图和 bitfield 都长在 String 上，后面单独讲。
-
-## 参考
-
-- [Redis Strings](https://redis.io/docs/latest/develop/data-types/strings/)
-- [Redis Bitmaps](https://redis.io/docs/latest/develop/data-types/strings/bitmaps/)
-- [Redis Bitfields](https://redis.io/docs/latest/develop/data-types/strings/bitfields/)
+- [Redis Strings Explained](https://www.youtube.com/watch?v=7CUt4yWeRQE)（官方短视频）
+- [RU101](https://university.redis.com/courses/ru101/)（Redis University 课程里讲字符串的部分）
+- [官方原文](https://redis.io/docs/latest/develop/data-types/strings/)

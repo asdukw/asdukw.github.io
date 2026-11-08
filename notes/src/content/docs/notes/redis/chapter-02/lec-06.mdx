@@ -1,0 +1,304 @@
+---
+title: "2.6 Hashes：字段级读写的小对象"
+description: 按官方结构整理 Redis 哈希——HSET/HGET/HMGET/HINCRBY 基础、7.4 起的字段级过期、8.10 的紧凑哈希与共享字段名阈值、复杂度与容量上限。
+sidebar:
+  order: 6
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+哈希是「字段 → 值」的映射，可以整体当作一个对象来看：一辆自行车的 `model`、`brand`、`type`、`price` 就是四个字段。相比把整个对象序列化成一个字符串，哈希的关键差别是**能只读写其中一个字段**，不必把整块取出来再写回去。字段数量本身没有实际限制（除非内存不够），所以同一个哈希里既可以是对象，也可以是一组计数器。
+
+小哈希在内存里用紧凑编码（listpack）存放：字段名和值紧凑地连续排在一块内存里，没有「每个字段一条 dict 记录」的指针与对象头开销，所以小对象特别省。字段变多、值变大后会自动换成哈希表编码，切换阈值由 `hash-max-listpack-entries` 这类参数控制，具体默认值随版本和配置走，看 `CONFIG GET` 即可。
+
+基础读写是 `HSET` / `HGET`，取多个字段用 `HMGET`，对数字字段做原子加减用 `HINCRBY`：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> HSET bike:1 model Deimos brand Ergonom type 'Enduro bikes' price 4972
+(integer) 4
+> HGET bike:1 model
+"Deimos"
+> HGET bike:1 price
+"4972"
+> HGETALL bike:1
+1) "model"
+2) "Deimos"
+3) "brand"
+4) "Ergonom"
+5) "type"
+6) "Enduro bikes"
+7) "price"
+8) "4972"
+
+# 一次取多个字段；不存在的字段返回 nil，不报错
+> HMGET bike:1 model price no-such-field
+1) "Deimos"
+2) "4972"
+3) (nil)
+
+# 字段不存在时按 0 起算，负值就是减法
+> HINCRBY bike:1 price 100
+(integer) 5072
+> HINCRBY bike:1 price -100
+(integer) 4972
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+import redis
+
+r = redis.Redis(host="localhost", port=6379, decode_responses=True)
+
+r.hset("bike:1", mapping={
+    "model": "Deimos",
+    "brand": "Ergonom",
+    "type": "Enduro bikes",
+    "price": 4972,
+})                                  # 4
+r.hget("bike:1", "model")           # 'Deimos'
+r.hgetall("bike:1")                 # {'model': 'Deimos', ...}
+r.hmget("bike:1", ["model", "price", "no-such-field"])   # ['Deimos', '4972', None]
+r.hincrby("bike:1", "price", 100)   # 5072
+r.hincrby("bike:1", "price", -100)  # 4972
+```
+
+</TabItem>
+</Tabs>
+
+`HSET` 对已存在的字段是**覆盖**，不是合并；`HMGET` 对不存在的字段返回 nil 而已，适合「有多少拿多少」的读取。
+
+## 示例
+
+官方这一节的例子是「用哈希存计数器」：一辆车的骑行次数、摔车次数、换手次数各占一个字段，放在同一个 `bike:1:stats` 里，每次事件用 `HINCRBY` 原子累加。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> HINCRBY bike:1:stats rides 1
+(integer) 1
+> HINCRBY bike:1:stats rides 1
+(integer) 2
+> HINCRBY bike:1:stats rides 1
+(integer) 3
+> HINCRBY bike:1:stats crashes 1
+(integer) 1
+> HINCRBY bike:1:stats owners 1
+(integer) 1
+> HGET bike:1:stats rides
+"3"
+> HMGET bike:1:stats owners crashes
+1) "1"
+2) "1"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+for _ in range(3):
+    r.hincrby("bike:1:stats", "rides", 1)   # 1, 2, 3
+r.hincrby("bike:1:stats", "crashes", 1)     # 1
+r.hincrby("bike:1:stats", "owners", 1)      # 1
+
+r.hget("bike:1:stats", "rides")             # '3'
+r.hmget("bike:1:stats", ["owners", "crashes"])   # ['1', '1']
+```
+
+</TabItem>
+</Tabs>
+
+好处是三个计数器共用一个 key：读取时一次 `HMGET` 就能全拿到，既省往返也省 key 数量；而且每个 `HINCRBY` 都是原子的，不会出现并发下丢增量。
+
+## 字段过期
+
+从 Redis 7.4 起，可以给哈希里的**单个字段**单独设过期时间或 TTL，语义参照 key 过期。设置用这四个：
+
+- `HEXPIRE`：剩余 TTL，单位秒。
+- `HPEXPIRE`：剩余 TTL，单位毫秒。
+- `HEXPIREAT`：过期时间点，Unix 时间戳，单位秒。
+- `HPEXPIREAT`：过期时间点，Unix 时间戳，单位毫秒。
+
+查询过期状态用这四个：`HEXPIRETIME` / `HPEXPIRETIME`（返回时间戳，秒 / 毫秒）、`HTTL` / `HPTTL`（返回剩余 TTL，秒 / 毫秒）。取消过期用 `HPERSIST`。
+
+Redis 8.0 又补了两个把读写和 TTL 合成一步的命令：`HGETEX`（读字段值，可选同时设 TTL）和 `HSETEX`（写字段值，可选同时设 TTL）。
+
+注意语法形态：`HEXPIRE key 秒数 FIELDS 字段数 字段1 字段2 ...`——要显式写出字段个数，再列字段名。
+
+### 典型的字段过期场景
+
+1. **事件追踪**：用一个哈希存最近一小时的事件，每个事件的字段 TTL 设为 1 小时，用 `HLEN` 数一下就是这一小时的事件量。
+2. **风控 / 防欺诈**：按小时建计数器字段，每个字段 TTL 48 小时，查这个哈希就得到最近 48 小时每小时的事件数。
+3. **客户会话管理**：会话数据放在哈希里，会话 key 里的 session 字段和会话本身同时过期。
+4. **活跃会话统计**：所有活跃会话挂在同一个哈希下，每个会话字段在无活动后自动过期，`HLEN` 即当前活跃数。
+
+### 字段过期示例
+
+官方示例用的哈希 `sensor:sensor1` 存传感器数据：`air_quality` = 256，`battery_level` = 89。因为字段会过期，每个例子都先重建这个哈希，保证能单独运行。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> DEL sensor:sensor1
+(integer) 0
+> HSET sensor:sensor1 air_quality 256 battery_level 89
+(integer) 2
+> HEXPIRE sensor:sensor1 60 FIELDS 2 air_quality battery_level
+1) (integer) 1
+2) (integer) 1
+> HTTL sensor:sensor1 FIELDS 2 air_quality battery_level
+1) (integer) 60
+2) (integer) 60
+
+# 毫秒粒度
+> HPEXPIRE sensor:sensor1 60000 FIELDS 1 air_quality
+1) (integer) 1
+> HPTTL sensor:sensor1 FIELDS 1 air_quality
+1) (integer) 59994
+
+# 直接指定过期时间点（4102444800 只是个示例值）
+> HEXPIREAT sensor:sensor1 4102444800 FIELDS 1 air_quality
+1) (integer) 1
+> HEXPIRETIME sensor:sensor1 FIELDS 1 air_quality
+1) (integer) 4102444800
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.delete("sensor:sensor1")
+r.hset("sensor:sensor1", mapping={"air_quality": 256, "battery_level": 89})
+
+r.hexpire("sensor:sensor1", 60, "air_quality", "battery_level")   # [1, 1]
+r.httl("sensor:sensor1", "air_quality", "battery_level")          # [60, 60]
+
+r.hpexpire("sensor:sensor1", 60000, "air_quality")                # [1]
+r.hpttl("sensor:sensor1", "air_quality")                          # [59994]
+
+r.hexpireat("sensor:sensor1", 4102444800, "air_quality")          # [1]
+r.hexpiretime("sensor:sensor1", "air_quality")                    # [4102444800]
+
+r.hpersist("sensor:sensor1", "air_quality")                       # [1]
+```
+
+</TabItem>
+</Tabs>
+
+这些命令对每个字段分别返回结果，数组下标与传入的字段顺序一一对应（传两个字段就返回两个值）。字段过期和下面的紧凑哈希有交集：**用了字段过期的哈希不会被自动转成紧凑哈希**，即使字段数已经达到阈值。
+
+## 紧凑编码
+
+Redis 8.10 引入**紧凑哈希（compact hashes）**，专门省「字段名重复」这份开销。当很多哈希的字段名集合完全一样（典型场景：每个用户一个哈希，字段都是 `name`、`email`、`age`），Redis 可以把这套字段名只存一份，每个 key 里只放值，外加一个指向那份字段名集合的小引用。这是**内部编码**：命令和返回完全不变，老代码不用改，只是同样的数据占更少内存。
+
+适合的负载：
+
+- 大量 key 共享同一套、基本稳定的字段名——经典的对象映射，比如一个用户 / 一个订单 / 一个会话一个哈希。共享这套字段集合的 key 越多，省得越多。
+- 读和改值的速度和普通哈希一样。读任意字段（`HGET`、`HGETALL`、`HRANDFIELD`）不受影响；覆盖**已存在**字段的值（`HSET key field value` 且 field 已存在）也不受影响。
+
+不适合的负载：
+
+- **字段名经常变。** 用 `HSET` 加新字段或 `HDEL` 删字段，会让这个 key 脱离原来的字段名集合，按新布局重新归属（没见过的布局就新建一个集合）。持续加删字段的工作负载会把收益磨没。另外紧凑哈希是**一次性**的：一旦转成紧凑哈希，这个 key 一生都是紧凑哈希，只会在不同字段名集合之间搬，不会退回普通哈希。
+- **每个 key 的字段名都是独有的、高度动态的。** 共享度低，key 最后自己独占一份字段名集合，而集合本身有元数据开销，只被少数几个 key 用的集合可能比普通哈希还费内存。要有几百上千个 key 共享才划算。
+- **哈希非常大。** 复制和 slot 迁移时紧凑哈希是整块 blob 传输的，特别大的哈希键可能把收益抵消掉。
+
+开启方式有两种。
+
+### 批量导入：HIMPORT
+
+`HIMPORT` 命令族专门用来高效导入一批字段名相同的哈希：先用 `HIMPORT PREPARE` 把共享字段名声明一次，之后每个 key 用 `HIMPORT SET` 只发值即可。相比对每个 key 各跑一次 `HSET`，网络流量和单命令开销都更低，并且会提示 Redis 把这些新 key 存成紧凑哈希。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> HIMPORT PREPARE user name email age
+OK
+> HIMPORT SET user:1 user Alice alice@example.com 34
+OK
+> HIMPORT SET user:2 user Bob bob@example.com 41
+OK
+> HIMPORT SET user:3 user Carol carol@example.com 29
+OK
+> HGETALL user:2
+1) "age"
+2) "41"
+3) "name"
+4) "Bob"
+5) "email"
+6) "bob@example.com"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+# redis-py 稳定版不一定封装 HIMPORT，可先用原始命令；
+# 该命令族目前多数客户端标记为实验性，API 可能变动。
+r.execute_command("HIMPORT", "PREPARE", "user", "name", "email", "age")
+r.execute_command("HIMPORT", "SET", "user:1", "user", "Alice", "alice@example.com", 34)
+r.execute_command("HIMPORT", "SET", "user:2", "user", "Bob", "bob@example.com", 41)
+r.hgetall("user:2")
+```
+
+</TabItem>
+</Tabs>
+
+这样建出来的每个 key 都是普通哈希，注意几点：
+
+- `HIMPORT SET` 是**替换**已存在的 key，不是往上合并。
+- `HGETALL` 返回的字段顺序可能和声明顺序不同（上面就是 age / name / email）。
+- 字段集合归属于声明它的那条连接。支持 `HIMPORT` 的客户端会自己记住并向每条连接重新声明（连接池、重连、集群节点都算），不用手工管理；部分客户端（如 Jedis、Lettuce、StackExchange.Redis）没有 prepare 方法，改成先建集合对象、首次使用时由客户端声明。多数客户端把这个能力标为实验性，也有客户端不支持在事务里用。
+
+批量导入大量 key 时，把这些 `HIMPORT SET` 放进 [pipeline](https://redis.io/docs/latest/develop/using-commands/pipelining/) 发出去，共享网络往返，而不是逐条等回复。
+
+### 自动转换
+
+改不了客户端、也换不了命令的负载，可以让 Redis 自己转。下面这些配置默认全是 `0`（关闭），可以在运行时用 `CONFIG SET` 改。
+
+#### 写路径
+
+作用对象是普通命令（例如 `HSET`）创建或修改的哈希，现有应用一行代码不改就能拿到内存收益。
+
+生效方式和 `hash-max-listpack-entries` 一样是**懒的**：改了配置要等这个哈希下一次写入才应用，而不是执行 `CONFIG SET` 的瞬间。
+
+| 配置 | 含义 |
+|---|---|
+| `hash-min-template-entries` | 自动转换所需的**最少字段数**，下次写入时生效。`0` 表示关闭自动转换。 |
+| `hash-max-template-entries` | 自动转换的**字段数上限**：比这更宽的哈希保持普通哈希（避免超宽哈希进入共享注册表）。`0` 表示没有上限。 |
+
+即使字段数达到下限，用了字段过期的哈希也不会被转换。已经转换过的哈希，之后字段数涨过 `hash-max-template-entries` 也仍然是紧凑哈希。
+
+#### RDB 加载
+
+这个特性之前存下来的 RDB 里只有普通哈希。下面这几个配置让 Redis 在**加载 RDB 的过程中**顺手转换，升级后不用重写数据就能回收内存。它们只对不含紧凑哈希的 RDB 生效；已经含紧凑哈希的 RDB 原样加载，不做加载期转换。也就是说这是一次性的升级配置——只要 RDB 里出现了至少一个紧凑哈希，它们就再没作用了。
+
+| 配置 | 含义 |
+|---|---|
+| `hash-rdb-load-min-template-entries` | 加载期转换所需的最少字段数。`0` 表示关闭加载期转换。 |
+| `hash-rdb-load-max-template-entries` | 加载期转换的字段数上限。`0` 表示没有上限。 |
+| `hash-rdb-load-template-disassembly-threshold` | 一份转换后的字段名集合至少要**被这么多 key 共享**才保留。`0` 表示全部保留。 |
+
+拆分阈值存在的原因是避免为「只有几个 key 用」的字段名集合白付内存：加载结束时若某集合被使用的 key 数少于阈值，这些 key 退回普通哈希，集合释放。它同时是个安全阀：Redis 会统计仍低于阈值的已转换集合数，一旦这类集合创建满 1000 个而其中超过一半仍低于阈值，就判定这份数据集不适合紧凑哈希，加载中途停止新建，之后只转换能命中本次加载已有字段集合的哈希，其余保持普通。
+
+## 性能
+
+大多数哈希命令是 **O(1)**。
+
+少数命令是 **O(n)**（n 为字段-值对数量）：`HKEYS`、`HVALS`、`HGETALL`，以及大部分与过期相关的命令。字段多的时候别在大哈希上随手 `HGETALL`。
+
+## 上限
+
+每个哈希最多 **4,294,967,295（2^32 - 1）** 个字段-值对。实际上限只取决于部署 Redis 的机器总内存。
+
+## 延伸阅读
+
+- [Redis Hashes Explained](https://www.youtube.com/watch?v=-KdITaRkQ-U)（官方短视频）
+- [Redis University 的 RU101](https://university.redis.com/courses/ru101/)（系统讲哈希的部分）
+- [官方原文](https://redis.io/docs/latest/develop/data-types/hashes/)

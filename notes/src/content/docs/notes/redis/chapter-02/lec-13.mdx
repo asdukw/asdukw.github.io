@@ -1,0 +1,778 @@
+---
+title: 2.13 Time series：时间戳序列与区间聚合
+description: 按官方文档结构梳理 Redis 时间序列：TS.CREATE/TS.ADD 建库写点、retention 保留期、TS.RANGE 区间与标签过滤、聚合器与桶对齐、Redis 8.6 的 NaN、compaction 降采样规则、TS.DEL 删除。
+sidebar:
+  order: 13
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+时间序列存的是「时间戳 → 实数」这样的点对，写入和读取都很快，典型用途是仪表数据、系统指标、行情、IoT 传感器、智能电表和 QoS 监控。做区间查询、按标签筛多条序列、按时间桶做聚合，再拿聚合结果生成新序列，这一套都在同一个数据类型里。
+
+两个容易记错的点先放在前面：
+
+- 时间戳是 **64 位整数**，单位是**毫秒级 Unix 时间戳**（自 epoch 起的毫秒）。
+- 它不是内置数据类型，而是 Redis Stack / Redis 8 带的模块，命令前缀统一是 `TS.`。
+
+## 创建时间序列
+
+`TS.CREATE` 建一条空序列；如果直接 `TS.ADD` 一个不存在的 key，也会顺带创建它。
+
+命令成功后 `TYPE` 返回的是 `TSDB-TYPE`，这一点在排查「这个 key 到底是什么」时很有用：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> TS.CREATE thermometer:1
+OK
+> TYPE thermometer:1
+TSDB-TYPE
+> TS.RANGE thermometer:1 - +
+(empty array)
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+import redis
+
+r = redis.Redis(host="localhost", port=6379, decode_responses=True)
+ts = r.ts()
+
+ts.create("thermometer:1")
+r.type("thermometer:1")        # 'TSDB-TYPE'
+ts.range("thermometer:1", "-", "+")   # []
+```
+
+</TabItem>
+</Tabs>
+
+建序列时可以带两个关键参数：
+
+**retention（保留期）**：相对「最后一次写入的时间戳」计算，超过这个时长的老点会被自动丢弃。设为 0 表示永不过期——这也是默认值。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+# 在时间 1 写入 10.8，保留期 100ms
+> TS.ADD thermometer:2 1 10.8 RETENTION 100
+(integer) 1
+> TS.INFO thermometer:2
+ 1) totalSamples
+ 2) (integer) 1
+...
+ 9) retentionTime
+10) (integer) 100
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+ts.add("thermometer:2", 1, 10.8, retention_msecs=100)
+ts.info("thermometer:2")["retentionTime"]   # 100
+```
+
+</TabItem>
+</Tabs>
+
+注意 retention 是**滑动**的：它跟着最新的时间戳走，而不是按绝对时间过期。所以一条长期没人写的序列不会因为时间流逝而丢数据。
+
+**labels（标签）**：键值对，两个字段都是字符串，用来在多序列查询时做筛选（下面 `TS.MRANGE` 的 `FILTER` 就靠它）。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> TS.ADD thermometer:3 1 10.4 LABELS location UK type Mercury
+(integer) 1
+> TS.INFO thermometer:3
+...
+19) labels
+20) 1) 1) "location"
+       2) "UK"
+    2) 1) "type"
+       2) "Mercury"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+ts.add("thermometer:3", 1, 10.4, labels={"location": "UK", "type": "Mercury"})
+```
+
+</TabItem>
+</Tabs>
+
+## 写入数据点
+
+单点写用 `TS.ADD`，批量写用 `TS.MADD`——一次网络往返里可以往多条序列写多个点。有一处不对称要记住：**`TS.ADD` 会隐式建序列，`TS.MADD` 不会**，key 不存在直接报错。
+
+时间戳写 `*` 表示用服务器当前时钟。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> TS.CREATE thermometer:1
+OK
+> TS.ADD thermometer:2 1 10.8
+(integer) 1
+> TS.MADD thermometer:1 1 9.2 thermometer:1 2 9.9 thermometer:2 2 10.3
+1) (integer) 1
+2) (integer) 2
+3) (integer) 2
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+ts.create("thermometer:1")
+ts.add("thermometer:2", 1, 10.8)
+ts.madd([
+    ("thermometer:1", 1, 9.2),
+    ("thermometer:1", 2, 9.9),
+    ("thermometer:2", 2, 10.3),
+])   # [1, 2, 2]
+```
+
+</TabItem>
+</Tabs>
+
+`TS.MADD` 的返回值是「操作后每条序列各自有多少个样本」的数组，不是写入成功的条数，别拿它对结果做 `len()` 之外的推断。
+
+## 查询数据点
+
+`TS.GET` 只取时间戳最大的那个点，返回 `[timestamp, value]`：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> TS.GET thermometer:2
+1) (integer) 2
+2) 10.3
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+ts.get("thermometer:2")   # [2, 10.3]
+```
+
+</TabItem>
+</Tabs>
+
+`TS.RANGE` 按时间区间取点，**区间是闭区间**（起点和终点的时间戳都包含）。`-` 和 `+` 分别代表序列里的最小、最大时间戳；默认按时间戳升序返回，要降序就用 `TS.REVRANGE`。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> TS.CREATE rg:1
+OK
+> TS.MADD rg:1 0 18 rg:1 1 14 rg:1 2 22 rg:1 3 18 rg:1 4 24
+1) (integer) 0
+2) (integer) 1
+3) (integer) 2
+4) (integer) 3
+5) (integer) 4
+
+# 全部，升序
+> TS.RANGE rg:1 - +
+1) 1) (integer) 0
+   2) 18
+2) 1) (integer) 1
+   2) 14
+...
+
+# 截止到时间 1（含 1）
+> TS.RANGE rg:1 - 1
+1) 1) (integer) 0
+   2) 18
+2) 1) (integer) 1
+   2) 14
+
+# 从时间 3 起
+> TS.RANGE rg:1 3 +
+1) 1) (integer) 3
+   2) 18
+2) 1) (integer) 4
+   2) 24
+
+# 全部，降序
+> TS.REVRANGE rg:1 - +
+1) 1) (integer) 4
+   2) 24
+...
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+ts.create("rg:1")
+ts.madd([("rg:1", t, v) for t, v in enumerate([18, 14, 22, 18, 24])])
+
+ts.range("rg:1", "-", "+")      # [[0, 18.0], [1, 14.0], ...]
+ts.range("rg:1", "-", 1)        # [[0, 18.0], [1, 14.0]]
+ts.range("rg:1", 3, "+")        # [[3, 18.0], [4, 24.0]]
+ts.revrange("rg:1", "-", "+")   # 降序
+```
+
+</TabItem>
+</Tabs>
+
+两个区间过滤选项：
+
+- `FILTER_BY_TS`：列出具体时间戳，只保留这些点（时间区间参数仍然必须给）。
+- `FILTER_BY_VALUE`：给值设上下界，闭区间；上下界相同时就是「按值精确匹配」。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> TS.RANGE rg:1 - + FILTER_BY_TS 0 2 4
+1) 1) (integer) 0
+   2) 18
+2) 1) (integer) 2
+   2) 22
+3) 1) (integer) 4
+   2) 24
+
+> TS.REVRANGE rg:1 - + FILTER_BY_TS 0 2 4 FILTER_BY_VALUE 20 25
+1) 1) (integer) 4
+   2) 24
+2) 1) (integer) 2
+   2) 22
+
+> TS.REVRANGE rg:1 - + FILTER_BY_TS 0 2 4 FILTER_BY_VALUE 22 22
+1) 1) (integer) 2
+   2) 22
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+ts.range("rg:1", "-", "+", filter_by_ts=[0, 2, 4])
+ts.revrange("rg:1", "-", "+", filter_by_ts=[0, 2, 4], filter_by_value=(20, 25))
+ts.revrange("rg:1", "-", "+", filter_by_ts=[0, 2, 4], filter_by_value=(22, 22))
+```
+
+</TabItem>
+</Tabs>
+
+### Query multiple time series
+
+`TS.GET` / `TS.RANGE` / `TS.REVRANGE` 各有对应的多序列版本：`TS.MGET`、`TS.MRANGE`、`TS.MREVRANGE`。参数基本一致，区别是**第一个参数不再是 key**，而是一个标签过滤表达式；符合条件的序列会全部返回。
+
+过滤表达式支持按标签存在性、等值、多值（`(a,b)`）来筛。想让返回里带标签，用 `WITHLABELS` 带全部，或 `SELECTED_LABELS` 只带指定几个；都不写就是空数组。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> TS.CREATE rg:2 LABELS location us unit cm
+OK
+> TS.CREATE rg:3 LABELS location us unit in
+OK
+> TS.CREATE rg:4 LABELS location uk unit mm
+OK
+> TS.MADD rg:2 0 1.8 rg:3 0 0.9 rg:4 0 25
+1) (integer) 0
+2) (integer) 0
+3) (integer) 0
+
+# 每条美国序列的最后一个点
+> TS.MGET FILTER location=us
+1) 1) "rg:2"
+   2) (empty array)
+   3) 1) (integer) 0
+      2) 1.8
+2) 1) "rg:3"
+   2) (empty array)
+   3) 1) (integer) 0
+      2) 9.0E-1
+
+# 只带 unit 标签
+> TS.MGET SELECTED_LABELS unit FILTER location=us
+1) 1) "rg:2"
+   2) 1) 1) "unit"
+         2) "cm"
+   3) 1) (integer) 0
+      2) 1.8
+
+# 所有以毫米为单位的序列，带全部标签
+> TS.MRANGE - 2 WITHLABELS FILTER unit=mm
+1) 1) "rg:4"
+   2) 1) 1) "location"
+         2) "uk"
+      2) 1) "unit"
+         2) "mm"
+   3) 1) 1) (integer) 0
+         2) 25
+
+# cm 或 mm，只带 location，降序
+> TS.MREVRANGE 1 3 SELECTED_LABELS location FILTER unit=(cm,mm)
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+ts.create("rg:2", labels={"location": "us", "unit": "cm"})
+ts.create("rg:3", labels={"location": "us", "unit": "in"})
+ts.create("rg:4", labels={"location": "uk", "unit": "mm"})
+ts.madd([("rg:2", 0, 1.8), ("rg:3", 0, 0.9), ("rg:4", 0, 25)])
+
+ts.mget(["location=us"])
+ts.mget(["location=us"], selected_labels=["unit"])
+ts.mrange("-", 2, ["unit=mm"], with_labels=True)
+ts.mrevrange(1, 3, ["unit=(cm,mm)"], selected_labels=["location"])
+```
+
+</TabItem>
+</Tabs>
+
+## 聚合
+
+采样太密时，序列会变得很大。与其关心每个点，不如把整段时间切成等宽的「桶」（bucket），每个桶用一个聚合值代表——文档给的量级例子是：一天十亿个点，用 1 分钟一个桶，就压缩成 1440 个点。
+
+区间查询命令都可以带聚合器和桶宽。可用的聚合器：
+
+| aggregator | 含义 |
+| --- | --- |
+| `avg` | 所有非 NaN 值的算术平均 |
+| `sum` | 所有非 NaN 值之和 |
+| `min` | 最小非 NaN 值 |
+| `max` | 最大非 NaN 值 |
+| `range` | 最大与最小非 NaN 值之差 |
+| `count` | 非 NaN 值的个数 |
+| `countNaN` | NaN 值的个数（Redis 8.6 起） |
+| `countAll` | 全部值的个数，含 NaN 与非 NaN（Redis 8.6 起） |
+| `first` | 桶内时间戳最小的非 NaN 值 |
+| `last` | 桶内时间戳最大的非 NaN 值 |
+| `std.p` | 总体标准差 |
+| `std.s` | 样本标准差 |
+| `var.p` | 总体方差 |
+| `var.s` | 样本方差 |
+| `twa` | 按桶内时间跨度加权的时间加权平均（忽略 NaN，RedisTimeSeries 1.8 起） |
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> TS.CREATE rg:2
+OK
+> TS.MADD rg:2 0 1.8 rg:2 1 2.1 rg:2 2 2.3 rg:2 3 1.9 rg:2 4 1.78
+1) (integer) 0
+2) (integer) 1
+3) (integer) 2
+4) (integer) 3
+5) (integer) 4
+
+# 桶宽 2ms，5 个点 → 3 个值，最后一段只有 1.78 一个点
+> TS.RANGE rg:2 - + AGGREGATION avg 2
+1) 1) (integer) 0
+   2) 1.9500000000000002
+2) 1) (integer) 2
+   2) 2.0999999999999996
+3) 1) (integer) 4
+   2) 1.78
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+ts.create("rg:2")
+ts.madd([("rg:2", t, v) for t, v in enumerate([1.8, 2.1, 2.3, 1.9, 1.78])])
+
+ts.range("rg:2", "-", "+", aggregation_type="avg", bucket_size_msec=2)
+# [[0, 1.95], [2, 2.1], [4, 1.78]]
+```
+
+</TabItem>
+</Tabs>
+
+一次查询里用多个聚合器，用逗号分隔：
+
+```bash
+TS.RANGE rg:2 - + AGGREGATION min,avg,max 2
+```
+
+> **NaN 处理（Redis 8.6+）**：所有既有聚合器在计算时都会忽略 NaN。比如一个桶里是 `[1.0, NaN, 3.0]`，`avg` 返回 2.0（只算 1.0 和 3.0），`count` 返回 2。要统计 NaN 数量和总数，用 `countNaN` 与 `countAll`。
+
+### Bucket alignment
+
+桶的起点由一个「参考时间戳」决定，默认是 0。所以桶边界落在 `0, 25, 50, ...` 这样的绝对刻度上，而不会自动对齐到你查询的起点。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> TS.CREATE sensor3
+OK
+> TS.MADD sensor3 10 1000 sensor3 20 2000 sensor3 30 3000 sensor3 40 4000 sensor3 50 5000 sensor3 60 6000 sensor3 70 7000
+1) (integer) 10
+2) (integer) 20
+3) (integer) 30
+4) (integer) 40
+5) (integer) 50
+6) (integer) 60
+7) (integer) 70
+
+# 默认从 0 开始切 25ms 的桶
+> TS.RANGE sensor3 10 70 AGGREGATION min 25
+1) 1) (integer) 0
+   2) 1000
+2) 1) (integer) 25
+   2) 3000
+3) 1) (integer) 50
+   2) 5000
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+ts.create("sensor3")
+ts.madd([("sensor3", t, t * 100) for t in range(10, 80, 10)])
+
+ts.range("sensor3", 10, 70, aggregation_type="min", bucket_size_msec=25)
+# [[0, 1000.0], [25, 3000.0], [50, 5000.0]]
+```
+
+</TabItem>
+</Tabs>
+
+对齐到 0 时，第一个桶覆盖 `[0, 25)`，装进 1000 和 2000 得 1000；第二个桶是 3000、4000 得 3000；第三个桶 5000、6000、7000 得 5000。
+
+想按查询区间对齐，加 `ALIGN start`（或 `end`）：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> TS.RANGE sensor3 10 70 AGGREGATION min 25 ALIGN start
+1) 1) (integer) 10
+   2) 1000
+2) 1) (integer) 35
+   2) 4000
+3) 1) (integer) 60
+   2) 6000
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+ts.range(
+    "sensor3", 10, 70,
+    aggregation_type="min", bucket_size_msec=25, align="start",
+)
+# [[10, 1000.0], [35, 4000.0], [60, 6000.0]]
+```
+
+</TabItem>
+</Tabs>
+
+这次桶从 10 开始，`[10, 35)` 装了 1000/2000/3000 得 1000，`[35, 60)` 是 4000/5000 得 4000，`[60, 85)` 是 6000/7000 得 6000。同一个查询换了对齐方式，桶内的成员就完全变了——这是做聚合时最常踩的坑。
+
+### Aggregation across timeseries
+
+`TS.MRANGE` / `TS.MREVRANGE` 默认按序列分组返回。加 `GROUPBY` + `REDUCE` 可以改成按标签分组：同一标签值、同一时间戳的点合成一个结果（RedisTimeSeries 1.6 起）。
+
+下面四条序列按国家分组，`REDUCE max` 取每个时间戳上该国的最大值，`REDUCE avg` 取平均值：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> TS.CREATE wind:1 LABELS country uk
+OK
+> TS.CREATE wind:2 LABELS country uk
+OK
+> TS.CREATE wind:3 LABELS country us
+OK
+> TS.CREATE wind:4 LABELS country us
+OK
+> TS.MADD wind:1 1 12 wind:2 1 18 wind:3 1 5 wind:4 1 20
+1) (integer) 1
+2) (integer) 1
+3) (integer) 1
+4) (integer) 1
+> TS.MADD wind:1 2 14 wind:2 2 21 wind:3 2 4 wind:4 2 25
+1) (integer) 2
+2) (integer) 2
+3) (integer) 2
+4) (integer) 2
+
+> TS.MRANGE - + FILTER country=(us,uk) GROUPBY country REDUCE max
+1) 1) "country=uk"
+   2) (empty array)
+   3) 1) 1) (integer) 1
+         2) 18
+      2) 1) (integer) 2
+         2) 21
+2) 1) "country=us"
+   2) (empty array)
+   3) 1) 1) (integer) 1
+         2) 20
+      2) 1) (integer) 2
+         2) 25
+
+> TS.MRANGE - + FILTER country=(us,uk) GROUPBY country REDUCE avg
+1) 1) "country=uk"
+   2) (empty array)
+   3) 1) 1) (integer) 1
+         2) 15
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+ts.create("wind:1", labels={"country": "uk"})
+ts.create("wind:2", labels={"country": "uk"})
+ts.create("wind:3", labels={"country": "us"})
+ts.create("wind:4", labels={"country": "us"})
+ts.madd([
+    ("wind:1", 1, 12), ("wind:2", 1, 18),
+    ("wind:3", 1, 5), ("wind:4", 1, 20),
+    ("wind:1", 2, 14), ("wind:2", 2, 21),
+    ("wind:3", 2, 4), ("wind:4", 2, 25),
+])
+
+ts.mrange(
+    "-", "+", ["country=(us,uk)"],
+    groupby="country", reduce="max",
+)
+ts.mrange(
+    "-", "+", ["country=(us,uk)"],
+    groupby="country", reduce="avg",
+)
+```
+
+</TabItem>
+</Tabs>
+
+## NaN 值
+
+Redis 8.6 起，时间序列支持 NaN（Not a Number）。它的作用是**在保住时间轴结构的前提下，标记某个时刻没有有效测量**，而不是把这个点省略掉——省略会让「缺数据」和「没采过」变得无法区分。
+
+### Use Cases for NaN Values
+
+文档给的三种需要区分的语义：
+
+- **缺失数据**：这个时间戳上根本没采。
+- **无效数据**：采了但失败，比如传感器故障。
+- **未知数据**：值在语义上「尚不可知」，之后可能被补上。
+
+### NaN Behavior
+
+各组件的处理方式不一致，逐条记：
+
+- **写入**：`TS.ADD` / `TS.MADD` 插入 NaN。
+- **查询**：所有原始点查询（`TS.GET`、`TS.RANGE` 等）都会把 NaN 原样返回。
+- **聚合**：除 `countNaN` / `countAll` 外，所有聚合器都忽略 NaN。
+- **增减**：`TS.INCRBY` / `TS.DECRBY` 在当前值是 NaN、或操作数是 NaN 时**报错**。
+- **重复策略**：`MIN` / `MAX` / `SUM` 在混有 NaN 与非 NaN 时有特殊处理。
+- **值过滤**：`FILTER_BY_VALUE` 的上下界不能是 NaN。
+- **忽略重复**：用 `IGNORE` 参数时，NaN 永远不算重复。
+
+```bash
+> TS.CREATE sensor:temp LABELS type temperature location outdoor
+
+# 1020 这个时刻传感器故障
+> TS.MADD sensor:temp 1000 25.5 sensor:temp 1010 26.1 sensor:temp 1020 NaN sensor:temp 1030 24.8
+1) (integer) 1000
+2) (integer) 1010
+3) (integer) 1020
+4) (integer) 1030
+
+# 原始查询：NaN 照样返回
+> TS.RANGE sensor:temp - +
+1) 1) (integer) 1000
+   2) 25.5
+...
+3) 1) (integer) 1020
+   2) NaN
+
+# 聚合忽略 NaN：25.5、26.1、24.8 的平均
+> TS.RANGE sensor:temp - + AGGREGATION avg 1000
+1) 1) (integer) 1000
+   2) 25.466666666666665
+
+> TS.RANGE sensor:temp - + AGGREGATION count 1000
+1) 1) (integer) 1000
+   2) 3          # 非 NaN 个数
+
+> TS.RANGE sensor:temp - + AGGREGATION countNaN 1000
+1) 1) (integer) 1000
+   2) 1
+
+> TS.RANGE sensor:temp - + AGGREGATION countAll 1000
+1) 1) (integer) 1000
+   2) 4
+```
+
+## 降采样（compaction）
+
+聚合查询是「事后再算」。如果数据是持续流入的，同一个聚合要反复对最新数据跑。`compaction rule`（降采样规则）就是把这件事改成**增量计算**：数据一进来就按规则聚合，结果写进另一条目标序列，源序列本身不动。
+
+用 `TS.CREATERULE` 建规则，指定源序列、目标序列、聚合器和桶宽。两个前置条件：
+
+- 目标序列**必须已经存在**。
+- 规则只处理**建规则之后**写入源序列的数据，历史点不会回填。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+# 源序列
+> TS.CREATE hyg:1
+OK
+# 存降采样结果的目标序列
+> TS.CREATE hyg:compacted
+OK
+# 每 3ms 取一次最小值
+> TS.CREATERULE hyg:1 hyg:compacted AGGREGATION min 3
+OK
+> TS.INFO hyg:1
+...
+23) rules
+24) 1) 1) "hyg:compacted"
+       2) (integer) 3
+       3) MIN
+       4) (integer) 0
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+ts.create("hyg:1")
+ts.create("hyg:compacted")
+ts.createrule("hyg:1", "hyg:compacted", aggregation_type="min", bucket_size_msec=3)
+```
+
+</TabItem>
+</Tabs>
+
+关键在于**写入时机的滞后期**。往第一个桶（0–2ms）里写数据时，目标序列仍然是空的；等到时间 4 的数据进来、第一个桶已经封口，规则才会把那个桶的最小值写进目标序列：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> TS.CREATE hyg:1
+OK
+> TS.CREATE hyg:compacted
+OK
+> TS.CREATERULE hyg:1 hyg:compacted AGGREGATION min 3
+OK
+> TS.MADD hyg:1 0 75 hyg:1 1 77 hyg:1 2 78
+1) (integer) 0
+2) (integer) 1
+3) (integer) 2
+> TS.RANGE hyg:compacted - +
+(empty array)
+
+# 时间 3 属于下一个桶，此时第一个桶才结算
+> TS.ADD hyg:1 3 79
+(integer) 3
+> TS.RANGE hyg:compacted - +
+1) 1) (integer) 0
+   2) 75
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+ts.create("hyg:1")
+ts.create("hyg:compacted")
+ts.createrule("hyg:1", "hyg:compacted", aggregation_type="min", bucket_size_msec=3)
+
+ts.madd([("hyg:1", 0, 75), ("hyg:1", 1, 77), ("hyg:1", 2, 78)])
+ts.range("hyg:compacted", "-", "+")    # []
+
+ts.add("hyg:1", 3, 79)
+ts.range("hyg:compacted", "-", "+")    # [[0, 75.0]]
+```
+
+</TabItem>
+</Tabs>
+
+规则不会对**最新那个桶**产出数据，只对更早的桶写入并更新——这符合实时顺序写入的常态：桶没结束，聚合值本来就不该定论。
+
+但要注意「封口」只是逻辑上的说法：往后面的桶写数据，并不会让前面的桶变成不可变。如果你在非最新的桶里新增或删除数据，规则仍然会去更新那个桶对应的降采样结果。
+
+## 删除数据点
+
+`TS.DEL` 删除时间区间内的点，**闭区间**；要删单个时间戳，把它同时当作起点和终点。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> TS.ADD thermometer:1 1 9.2
+(integer) 1
+> TS.ADD thermometer:1 2 9.9
+(integer) 2
+> TS.ADD thermometer:1 3 9.7
+(integer) 3
+
+# 删掉 1 和 2
+> TS.DEL thermometer:1 1 2
+(integer) 2
+> TS.INFO thermometer:1
+ 1) totalSamples
+ 2) (integer) 1
+ 5) firstTimestamp
+ 6) (integer) 3
+ 7) lastTimestamp
+ 8) (integer) 3
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+ts.add("thermometer:1", 1, 9.2)
+ts.add("thermometer:1", 2, 9.9)
+ts.add("thermometer:1", 3, 9.7)
+
+# redis-py 各版本对这个方法的命名不完全一致，直接发原始命令最稳
+r.execute_command("TS.DEL", "thermometer:1", 1, 2)   # 2
+ts.info("thermometer:1")["totalSamples"]             # 1
+```
+
+</TabItem>
+</Tabs>
+
+## 与其他指标工具配合
+
+RedisTimeSeries 的 GitHub 组织下维护了一批对接项目：
+
+1. [Prometheus](https://github.com/RedisTimeSeries/prometheus-redistimeseries-adapter)：读写适配器，把 RedisTimeSeries 当后端库。
+2. [Grafana 7.1+](https://github.com/RedisTimeSeries/grafana-redis-datasource)：配合 Redis Data Source 插件使用。
+3. [Telegraf](https://github.com/influxdata/telegraf)：插件从 InfluxData 下载。
+4. StatsD、Graphite：通过 graphite 协议导出。
+
+换句话说，它可以直接顶在 Prometheus 远端存储、Grafana 数据源这些位置后面，不用自己写一层桥接。
+
+## 延伸阅读
+
+本节的其它页面讲 RedisTimeSeries 的更多概念细节，另有完整的[时间序列命令参考](https://redis.io/docs/latest/commands/?group=timeseries)。
+
+- [官方原文](https://redis.io/docs/latest/develop/data-types/timeseries/)
+- [RedisTimeSeries 仓库](https://github.com/RedisTimeSeries/RedisTimeSeries/)

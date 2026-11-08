@@ -1,0 +1,476 @@
+---
+title: 2.8 Lists：双端队列与阻塞读取
+description: 按官方文档结构梳理 Redis 列表：LPUSH/RPUSH 与弹出、LMOVE 原子搬移、LTRIM 定长截断、BLPOP/BRPOP 阻塞读取、key 的自动创建与删除、2^32-1 上限、性能与替代方案。
+sidebar:
+  order: 8
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Redis 的列表是**字符串值的有序序列**：`10, 20, 1, 2, 3` 就是一个列表。底层实现是链表，这决定了它的性格——在头部或尾部插入一个元素的耗时是**常数级**，往 1000 万元素的列表里 `LPUSH` 和往 10 个元素的列表里 `LPUSH` 一样快。
+
+代价在另一端：**按下标访问**不便宜。用数组实现的「列表」（Python 的 `list`、Ruby 的 `Array`）按下标取是 O(1)，链表则要做与下标成正比的工作。Redis 选链表，是因为数据库场景更看重「往很长的列表里快速追加」，以及后面会讲到的「常数时间取定长」。
+
+需要快速随机访问中等大小集合时，该用的是 Sorted Set，而不是 List。
+
+## 示例
+
+列表天然能拿来实现两种结构。FIFO 队列：从左边推入、从右边取出，取出的顺序就是写入的顺序。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> DEL bikes:repairs
+(integer) 1
+> LPUSH bikes:repairs bike:1
+(integer) 1
+> LPUSH bikes:repairs bike:2
+(integer) 2
+> RPOP bikes:repairs
+"bike:1"
+> RPOP bikes:repairs
+"bike:2"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.delete("bikes:repairs")
+r.lpush("bikes:repairs", "bike:1")   # 1
+r.lpush("bikes:repairs", "bike:2")   # 2
+r.rpop("bikes:repairs")              # 'bike:1'
+r.rpop("bikes:repairs")              # 'bike:2'
+```
+
+</TabItem>
+</Tabs>
+
+LIFO 栈：两边都在左端操作，最后推进去的先出来。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> DEL bikes:repairs
+(integer) 1
+> LPUSH bikes:repairs bike:1
+(integer) 1
+> LPUSH bikes:repairs bike:2
+(integer) 2
+> LPOP bikes:repairs
+"bike:2"
+> LPOP bikes:repairs
+"bike:1"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.delete("bikes:repairs")
+r.lpush("bikes:repairs", "bike:1")
+r.lpush("bikes:repairs", "bike:2")
+r.lpop("bikes:repairs")   # 'bike:2'
+r.lpop("bikes:repairs")   # 'bike:1'
+```
+
+</TabItem>
+</Tabs>
+
+推入与弹出是对称的：`LPUSH` / `RPUSH` 往左（头）、右（尾）加，`LPOP` / `RPOP` 从对应的一端取出。取的时候元素同时被移除，没有元素了返回 `NULL`。
+
+`LRANGE` 用两个下标取区间，下标可以是负数，`-1` 是最后一个元素，`-2` 是倒数第二个：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> DEL bikes:repairs
+(integer) 1
+> RPUSH bikes:repairs bike:1
+(integer) 1
+> RPUSH bikes:repairs bike:2
+(integer) 2
+> LPUSH bikes:repairs bike:important_bike
+(integer) 3
+> LRANGE bikes:repairs 0 -1
+1) "bike:important_bike"
+2) "bike:1"
+3) "bike:2"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.delete("bikes:repairs")
+r.rpush("bikes:repairs", "bike:1")
+r.rpush("bikes:repairs", "bike:2")
+r.lpush("bikes:repairs", "bike:important_bike")
+r.lrange("bikes:repairs", 0, -1)
+# ['bike:important_bike', 'bike:1', 'bike:2']
+```
+
+</TabItem>
+</Tabs>
+
+`LPUSH` 和 `RPUSH` 都是**变参命令**，一次调用可以推多个元素，省往返：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> DEL bikes:repairs
+(integer) 1
+> RPUSH bikes:repairs bike:1 bike:2 bike:3
+(integer) 3
+> LPUSH bikes:repairs bike:important_bike bike:very_important_bike
+(integer) 5
+> LRANGE bikes:repairs 0 -1
+1) "bike:very_important_bike"
+2) "bike:important_bike"
+3) "bike:1"
+4) "bike:2"
+5) "bike:3"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.delete("bikes:repairs")
+r.rpush("bikes:repairs", "bike:1", "bike:2", "bike:3")
+r.lpush("bikes:repairs", "bike:important_bike", "bike:very_important_bike")
+r.lrange("bikes:repairs", 0, -1)
+# ['bike:very_important_bike', 'bike:important_bike', 'bike:1', 'bike:2', 'bike:3']
+```
+
+</TabItem>
+</Tabs>
+
+注意多个值推进左端时，后一个会落在更靠左的位置。
+
+`LMOVE` 把「从 A 弹出 + 推入 B」合成一个原子操作，适合在多个列表之间搬任务而不出现丢件或重复：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> DEL bikes:repairs bikes:finished
+(integer) 1
+> LPUSH bikes:repairs bike:1
+(integer) 1
+> LPUSH bikes:repairs bike:2
+(integer) 2
+> LMOVE bikes:repairs bikes:finished LEFT LEFT
+"bike:2"
+> LRANGE bikes:repairs 0 -1
+1) "bike:1"
+> LRANGE bikes:finished 0 -1
+1) "bike:2"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.delete("bikes:repairs", "bikes:finished")
+r.lpush("bikes:repairs", "bike:1")
+r.lpush("bikes:repairs", "bike:2")
+r.lmove("bikes:repairs", "bikes:finished", "LEFT", "LEFT")   # 'bike:2'
+r.lrange("bikes:repairs", 0, -1)    # ['bike:1']
+r.lrange("bikes:finished", 0, -1)   # ['bike:2']
+```
+
+</TabItem>
+</Tabs>
+
+`LTRIM` 用来把列表截成定长，只保留最新 N 条，老的直接丢弃。它和 `LRANGE` 语法一样，但**不是显示区间，而是把区间设为新的列表值**，区间外的元素全删掉：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> DEL bikes:repairs
+(integer) 1
+> RPUSH bikes:repairs bike:1 bike:2 bike:3 bike:4 bike:5
+(integer) 5
+> LTRIM bikes:repairs 0 2
+OK
+> LRANGE bikes:repairs 0 -1
+1) "bike:1"
+2) "bike:2"
+3) "bike:3"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.delete("bikes:repairs")
+r.rpush("bikes:repairs", "bike:1", "bike:2", "bike:3", "bike:4", "bike:5")
+r.ltrim("bikes:repairs", 0, 2)
+r.lrange("bikes:repairs", 0, -1)   # ['bike:1', 'bike:2', 'bike:3']
+```
+
+</TabItem>
+</Tabs>
+
+用负下标则保留**最新**的 3 条：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> DEL bikes:repairs
+(integer) 1
+> RPUSH bikes:repairs bike:1 bike:2 bike:3 bike:4 bike:5
+(integer) 5
+> LTRIM bikes:repairs -3 -1
+OK
+> LRANGE bikes:repairs 0 -1
+1) "bike:3"
+2) "bike:4"
+3) "bike:5"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.delete("bikes:repairs")
+r.rpush("bikes:repairs", "bike:1", "bike:2", "bike:3", "bike:4", "bike:5")
+r.ltrim("bikes:repairs", -3, -1)
+r.lrange("bikes:repairs", 0, -1)   # ['bike:3', 'bike:4', 'bike:5']
+```
+
+</TabItem>
+</Tabs>
+
+「`LPUSH` + `LTRIM`」就是最常用的定长「最新 N 条」写法：每次写入顺手裁掉超出部分，读取端 `LRANGE 0 9` 直接拿最新 10 条。`LLEN` 查长度，空列表为 0：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> LLEN bikes:repairs
+(integer) 0
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.llen("bikes:repairs")   # 0
+```
+
+</TabItem>
+</Tabs>
+
+另外两个典型场景：一是「记住用户最新发布的内容」（每次发帖 `LPUSH` 一个 ID，首页用 `LRANGE 0 9` 取最新 10 条）；二是**进程间通信**的生产者/消费者——生产者把任务推进列表，消费者（worker）取出来执行。resque、sidekiq 这类后台任务库底层就是这么做的。
+
+## 阻塞操作
+
+列表能当队列用，靠的是**阻塞操作**。
+
+设想生产者用 `LPUSH` 推任务、消费者用 `RPOP` 取任务。列表为空时 `RPOP` 只会返回 `NULL`，消费者只能等一会儿再重试——这就是**轮询**，有两个毛病：
+
+1. Redis 和客户端都在处理无用命令，列表空的时候所有请求都白跑。
+2. 处理有延迟：worker 拿到 `NULL` 后要睡一段时间。想缩短延迟就得缩短间隔，结果又把问题 1 放大。
+
+所以 Redis 提供了 `BRPOP` / `BLPOP`，即 `RPOP` / `LPOP` 的阻塞版本：列表为空时挂起，直到有新元素被推进来、或到达用户指定的超时时间才返回。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> DEL bikes:repairs
+(integer) 1
+> RPUSH bikes:repairs bike:1 bike:2
+(integer) 2
+> BRPOP bikes:repairs 1
+1) "bikes:repairs"
+2) "bike:2"
+> BRPOP bikes:repairs 1
+1) "bikes:repairs"
+2) "bike:1"
+> BRPOP bikes:repairs 1
+(nil)
+(2.01s)
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.delete("bikes:repairs")
+r.rpush("bikes:repairs", "bike:1", "bike:2")
+r.brpop("bikes:repairs", timeout=1)   # ('bikes:repairs', 'bike:2')
+r.brpop("bikes:repairs", timeout=1)   # ('bikes:repairs', 'bike:1')
+r.brpop("bikes:repairs", timeout=1)   # None（约 1 秒后超时）
+```
+
+</TabItem>
+</Tabs>
+
+上面第三条的语义是：「在 `bikes:repairs` 上等元素，但 1 秒后还没有就返回」。
+
+几个要点：
+
+- 超时写 `0` 表示**永久等待**。
+- 可以一次传**多个列表**，等其中任意一个先来元素。
+- 服务的顺序是**先阻塞先服务**：谁先挂起等这个列表，元素推进来时就先给谁。
+- 返回值与 `RPOP` 不同，是**两元数组**（键名 + 值），因为命令可能同时在等多个列表，必须告诉你元素来自哪个 key。
+- 超时返回 `NULL`。
+
+想做得更稳，还有旋转队列（rotating queue）用的 `LMOVE`，以及它的阻塞版本 `BLMOVE`。
+
+## key 的自动创建与删除
+
+前面的例子里从没手动建过空列表，也没在列表空了之后手动删 key，这些都由 Redis 负责。这个规则不只适用于 List，也适用于所有由多个元素组成的类型：Stream、Set、Sorted Set、Hash。
+
+三条规则概括：
+
+1. 往聚合类型里加元素时，如果目标 key 不存在，先创建一个该类型的空聚合，再加元素。
+2. 从聚合类型里删元素时，如果值变空，key 会被自动销毁。**Stream 是唯一的例外。**
+3. 对不存在的 key 调用只读命令（如 `LLEN`）或会删元素的写命令，结果等同于这个 key 是一个该类型的空聚合。
+
+规则 1：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> DEL new_bikes
+(integer) 0
+> LPUSH new_bikes bike:1 bike:2 bike:3
+(integer) 3
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.delete("new_bikes")
+r.lpush("new_bikes", "bike:1", "bike:2", "bike:3")   # 3
+```
+
+</TabItem>
+</Tabs>
+
+但 key 已存在且类型不对时，不会「帮你转换」，而是直接报错：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> DEL new_bikes
+(integer) 1
+> SET new_bikes bike:1
+OK
+> TYPE new_bikes
+string
+> LPUSH new_bikes bike:2 bike:3
+(error) WRONGTYPE Operation against a key holding the wrong kind of value
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.delete("new_bikes")
+r.set("new_bikes", "bike:1")
+r.type("new_bikes")                          # 'string'
+r.lpush("new_bikes", "bike:2", "bike:3")     # ResponseError: WRONGTYPE ...
+```
+
+</TabItem>
+</Tabs>
+
+规则 2：最后一个元素被弹出后，key 就消失了：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> DEL bikes:repairs
+(integer) 1
+> LPUSH bikes:repairs bike:1 bike:2 bike:3
+(integer) 3
+> EXISTS bikes:repairs
+(integer) 1
+> LPOP bikes:repairs
+"bike:3"
+> LPOP bikes:repairs
+"bike:2"
+> LPOP bikes:repairs
+"bike:1"
+> EXISTS bikes:repairs
+(integer) 0
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.delete("bikes:repairs")
+r.lpush("bikes:repairs", "bike:1", "bike:2", "bike:3")
+r.exists("bikes:repairs")   # 1
+r.lpop("bikes:repairs")     # 'bike:3'
+r.lpop("bikes:repairs")     # 'bike:2'
+r.lpop("bikes:repairs")     # 'bike:1'
+r.exists("bikes:repairs")   # 0
+```
+
+</TabItem>
+</Tabs>
+
+规则 3：对不存在的 key 做只读或「删元素」的操作，得到的是空列表的语义，而不是错误：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> DEL bikes:repairs
+(integer) 1
+> LLEN bikes:repairs
+(integer) 0
+> LPOP bikes:repairs
+(nil)
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.delete("bikes:repairs")
+r.llen("bikes:repairs")   # 0
+r.lpop("bikes:repairs")   # None
+```
+
+</TabItem>
+</Tabs>
+
+## 上限
+
+一个列表最多 **2^32 - 1**（4,294,967,295）个元素。
+
+## 性能
+
+访问头尾的操作是 **O(1)**：`LPUSH`、`RPUSH`、`LPOP`、`RPOP`、`LLEN` 都很快。
+
+而在列表**内部**做文章的命令通常是 **O(n)**，典型是 `LINDEX`、`LINSERT`、`LSET`，在长列表上要慎用。
+
+`LRANGE` 技术上也是 O(n)，但只取靠近头或尾的一小段时，实际是常数时间——这也是「最新 N 条」模式能成立的原因。
+
+## 替代方案
+
+如果要存储并处理**不确定长度的事件流**（要消费位点、要多个消费组、要回溯），应该用 [Redis streams](https://redis.io/docs/latest/develop/data-types/streams/)，而不是 List。
+
+## 延伸阅读
+
+- [官方原文：Lists](https://redis.io/docs/latest/develop/data-types/lists/)
+- [列表命令清单](https://redis.io/docs/latest/commands/?group=list)
+- [阻塞类命令：BLPOP / BRPOP / BLMOVE](https://redis.io/docs/latest/commands/blpop/)

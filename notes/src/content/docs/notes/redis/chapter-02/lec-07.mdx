@@ -1,0 +1,273 @@
+---
+title: "2.7 JSON：原生嵌套文档"
+description: 按官方结构整理 Redis JSON——JSONPath 与二进制树存储、JSON.SET/GET、字符串与数字与数组与对象操作、CLI 格式化输出、模块位置与 128 层嵌套限制。
+sidebar:
+  order: 7
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+JSON 是 Redis 里的**模块能力**，不是核心命令集：所有命令都带 `JSON.` 前缀，由 RedisJSON 提供。它早期以 Redis Stack 里的模块形式分发，Redis 8 的 Open Source 发行版也把它作为组成部分带上，Redis Software 和 Redis Cloud 同样可用——也就是说换个官方发行版就有，但别指望在「只有核心命令」的最小安装里直接跑。
+
+它让人把一个 key 直接存成一份结构化文档，而不是序列化后的字符串：可以按路径只读、只改其中一小块，文档内部的类型也保留着，所以能和 Redis Search 配合对文档建索引、做查询。这正是「字符串里塞一段 JSON」做不到的部分。
+
+## 主要特性
+
+官方列的四条能力，也是它和字符串存 JSON 的区别所在：
+
+- 完整支持 JSON 标准。
+- 支持 [JSONPath](http://goessner.net/articles/JsonPath/) 语法，用来选中、更新文档内部元素（`$` 表示根）。
+- 文档以**二进制树结构**存储，访问子元素的路径很短，不用整体反序列化。
+- 对每一种 JSON 值类型都提供类型化的原子操作（字符串、数字、数组、对象各有一套命令）。
+
+## 在 Redis 中使用 JSON
+
+入口是 `JSON.SET`，它接受任意 JSON 值类型。路径参数 `$` 就是 JSONPath 里的根节点：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> JSON.SET bike $ '"Hyperion"'
+OK
+> JSON.GET bike $
+"[\"Hyperion\"]"
+> JSON.TYPE bike $
+1) "string"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+import redis
+
+r = redis.Redis(host="localhost", port=6379, decode_responses=True)
+
+r.json().set("bike", "$", "Hyperion")   # True
+r.json().get("bike", "$")               # ['Hyperion']
+r.json().type("bike", "$")              # 'string'
+```
+
+</TabItem>
+</Tabs>
+
+注意 `JSON.GET` 用路径读时返回的是**数组**（因为路径可能匹配多个值），redis-cli 里看到的是 JSON 文本，Python 侧已经是解析好的对象。
+
+Python 侧统一用 redis-py，`r.json()` 就是 JSON 命令的入口，后续示例沿用这个 `r`。下文的命令名与 `JSON.*` 一一对应，方法名去掉前缀、首字母小写即可（如 `JSON.ARRAPPEND` → `r.json().arrappend`）。
+
+字符串有自己的命令：`JSON.STRLEN` 取长度，`JSON.STRAPPEND` 追加：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> JSON.STRLEN bike $
+1) (integer) 8
+> JSON.STRAPPEND bike $ '" (Enduro bikes)"'
+1) (integer) 23
+> JSON.GET bike $
+"[\"Hyperion (Enduro bikes)\"]"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.json().strlen("bike", "$")                        # [8]
+r.json().strappend("bike", " (Enduro bikes)", "$")  # [23]
+r.json().get("bike", "$")                           # ['Hyperion (Enduro bikes)']
+```
+
+</TabItem>
+</Tabs>
+
+数字可以原地加和乘，步长允许带小数：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> JSON.SET crashes $ 0
+OK
+> JSON.NUMINCRBY crashes $ 1
+"[1]"
+> JSON.NUMINCRBY crashes $ 1.5
+"[2.5]"
+> JSON.NUMINCRBY crashes $ -0.75
+"[1.75]"
+> JSON.NUMMULTBY crashes $ 24
+"[42.0]"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.json().set("crashes", "$", 0)          # True
+r.json().numincrby("crashes", "$", 1)    # [1]
+r.json().numincrby("crashes", "$", 1.5)  # [2.5]
+r.json().numincrby("crashes", "$", -0.75)  # [1.75]
+r.json().nummultby("crashes", "$", 24)   # [42.0]
+```
+
+</TabItem>
+</Tabs>
+
+`JSON.NUMMULTBY` 在 redis-py 里已被标记为弃用，保留示例是为了对齐官方文档，新代码优先用 `JSON.NUMINCRBY` 配合乘数换算。
+
+数组和对象用 JSONPath 直接下钻，越界以外还支持负索引：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> JSON.SET newbike $ '["Deimos", {"crashes": 0}, null]'
+OK
+> JSON.GET newbike $
+"[[\"Deimos\",{\"crashes\":0},null]]"
+> JSON.GET newbike $[1].crashes
+"[0]"
+> JSON.DEL newbike $[-1]
+(integer) 1
+> JSON.GET newbike $
+"[[\"Deimos\",{\"crashes\":0}]]"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.json().set("newbike", "$", ["Deimos", {"crashes": 0}, None])   # True
+r.json().get("newbike", "$[1].crashes")   # [0]
+r.json().delete("newbike", "$[-1]")       # 1
+r.json().get("newbike", "$")              # [['Deimos', {'crashes': 0}]]
+```
+
+</TabItem>
+</Tabs>
+
+`JSON.DEL` 按 path 删除任意 JSON 值。数组还有一组专门的命令——追加、按下标插入、裁剪区间、弹出：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> JSON.SET riders $ []
+OK
+> JSON.ARRAPPEND riders $ '"Norem"'
+1) (integer) 1
+> JSON.ARRINSERT riders $ 1 '"Prickett"' '"Royce"' '"Castilla"'
+1) (integer) 4
+> JSON.GET riders $
+"[[\"Norem\",\"Prickett\",\"Royce\",\"Castilla\"]]"
+> JSON.ARRTRIM riders $ 1 1
+1) (integer) 1
+> JSON.GET riders $
+"[[\"Prickett\"]]"
+> JSON.ARRPOP riders $
+1) "\"Prickett\""
+> JSON.ARRPOP riders $
+1) (nil)
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.json().set("riders", "$", [])                                  # True
+r.json().arrappend("riders", "$", "Norem")                       # [1]
+r.json().arrinsert("riders", "$", 1, "Prickett", "Royce", "Castilla")  # [4]
+r.json().arrtrim("riders", "$", 1, 1)                            # [1]
+r.json().arrpop("riders", "$")                                   # ['Prickett']
+r.json().arrpop("riders", "$")                                   # [None]
+```
+
+</TabItem>
+</Tabs>
+
+对象侧有 `JSON.OBJLEN`（字段数）和 `JSON.OBJKEYS`（字段名）：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> JSON.SET bike:1 $ '{"model": "Deimos", "brand": "Ergonom", "price": 4972}'
+OK
+> JSON.OBJLEN bike:1 $
+1) (integer) 3
+> JSON.OBJKEYS bike:1 $
+1) 1) "model"
+   2) "brand"
+   3) "price"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.json().set("bike:1", "$", {"model": "Deimos", "brand": "Ergonom", "price": 4972})
+r.json().objlen("bike:1", "$")    # [3]
+r.json().objkeys("bike:1", "$")   # [['model', 'brand', 'price']]
+```
+
+</TabItem>
+</Tabs>
+
+从 **Redis 8.8** 起，`JSON.SET` 多了一个存储层面的选项 `FPHA BF16|FP16|FP32|FP64`，用来给浮点同构数组（float-point homogeneous array）强制指定精度，省内存：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> JSON.SET fp_array $ '[[1,2,3,4e3],[5,6.0,7,8]]' FPHA FP16
+OK
+> JSON.GET fp_array $
+"[[[1.0,2.0,3.0,4000.0],[5.0,6.0,7.0,8.0]]]"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.json().set("fp_array", "$", [[1, 2, 3, 4e3], [5, 6.0, 7, 8]], fpha="FP16")
+r.json().get("fp_array", "$")   # [[[1.0, 2.0, 3.0, 4000.0], [5.0, 6.0, 7.0, 8.0]]]
+```
+
+</TabItem>
+</Tabs>
+
+## 格式化 CLI 输出
+
+`JSON.GET` 默认输出的是一行紧凑 JSON，读起来费劲。`redis-cli` 支持 `--raw`，再配合 `INDENT`、`NEWLINE`、`SPACE` 三个格式化关键字，就能让 CLI 自己排版：
+
+```bash
+$ redis-cli --raw
+> JSON.GET obj INDENT "\t" NEWLINE "\n" SPACE " " $
+[
+	{
+		"name": "Leonard Cohen",
+		"lastSeen": 1478476800,
+		"loggedOut": true
+	}
+]
+```
+
+这三个关键字是 CLI 的输出格式参数，不是文档内容；程序里用客户端时拿到的已经是解析好的对象，需要缩进直接 `json.dumps(obj, indent=2)` 即可。
+
+## 启用 Redis JSON
+
+JSON 数据类型属于 Redis Open Source（以 RedisJSON 模块的形式随 Redis Stack / Redis 8 发行），在 Redis Software 和 Redis Cloud 里也提供，装好发行版就能用，不需要另外编译模块。安装步骤见：
+
+- [安装 Redis Open Source](https://redis.io/docs/latest/operate/oss_and_stack/install/install-stack/)
+- [安装 Redis Software](https://redis.io/docs/latest/operate/rs/installing-upgrading/install/)
+
+## 限制
+
+传给命令的 JSON 值**嵌套深度最多 128 层**。如果某个对象或数组的嵌套层级超过 128，命令直接返回错误。
+
+## 延伸阅读
+
+- [官方原文](https://redis.io/docs/latest/develop/data-types/json/)
+- [JSONPath 语法](https://redis.io/docs/latest/develop/data-types/json/path/)
+- [JSON 命令列表](https://redis.io/docs/latest/commands/?group=json)

@@ -1,0 +1,1280 @@
+---
+title: 2.12 Streams：日志式追加与消费者组
+description: 按官方文档结构梳理 Redis Streams：entry ID 的生成规则、XRANGE 与 XREAD 的读取模式、消费者组与 PEL、XCLAIM/XAUTOCLAIM/XNACK 的失败恢复、裁剪策略与多组语义。
+sidebar:
+  order: 12
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Stream 是一种「只能追加」的日志型结构，但比普通的 append-only log 多出两件事：**O(1) 的随机访问**，以及**消费者组**这类复杂的消费策略。它适合「边记录、边分发事件」的场景，典型用法有事件溯源（记录用户行为、点击）、传感器监控（设备读数）、通知（每个用户一条独立的流）。
+
+Redis 会给每个 entry 生成唯一 ID。之后既可以按 ID 取回某条记录，也可以从某个 ID 往后读。因为这些 ID 与时间相关，具体数值每次都不一样，例子里的 ID 不会和你自己实例上的一致。
+
+流支持多种裁剪策略来防止无限增长，也支持三种读法：`XRANGE` 按区间扫历史、`XREAD` 订阅新消息、`XREADGROUP` 走消费者组。从 8.2 起，`XADD`、`XTRIM`、`XDELEX`、`XACKDEL` 增加了对「多消费者组共存」的细粒度控制（`KEEPREF` / `DELREF` / `ACKED`）；从 8.6 起支持幂等投递（at-most-once 生产，配合 at-least-once 消费做去重），细节见[官方幂等说明](https://redis.io/docs/latest/develop/data-types/streams/idempotency/)。
+
+## 示例
+
+赛手经过检查点时写入一条 entry，字段是选手名、速度、名次和检查点编号：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XADD race:france * rider Castilla speed 30.2 position 1 location_id 1
+"1692632086370-0"
+> XADD race:france * rider Norem speed 28.8 position 3 location_id 1
+"1692632094485-0"
+> XADD race:france * rider Prickett speed 29.7 position 2 location_id 1
+"1692632102976-0"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xadd(
+    "race:france",
+    {"rider": "Castilla", "speed": 30.2, "position": 1, "location_id": 1},
+)  # '1692632086370-0'
+r.xadd(
+    "race:france",
+    {"rider": "Norem", "speed": 28.8, "position": 3, "location_id": 1},
+)  # '1692632094485-0'
+r.xadd(
+    "race:france",
+    {"rider": "Prickett", "speed": 29.7, "position": 2, "location_id": 1},
+)  # '1692632102976-0'
+```
+
+</TabItem>
+</Tabs>
+
+从 `1692632086370-0` 开始读两条：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XRANGE race:france 1692632086370-0 + COUNT 2
+1) 1) "1692632086370-0"
+   2) 1) "rider"
+      2) "Castilla"
+      3) "speed"
+      4) "30.2"
+      5) "position"
+      6) "1"
+      7) "location_id"
+      8) "1"
+2) 1) "1692632094485-0"
+   2) 1) "rider"
+      2) "Norem"
+      3) "speed"
+      4) "28.8"
+      5) "position"
+      6) "3"
+      7) "location_id"
+      8) "1"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xrange("race:france", "1692632086370-0", "+", count=2)
+# [('1692632086370-0', {'rider': 'Castilla', 'speed': '30.2', ...}), ...]
+```
+
+</TabItem>
+</Tabs>
+
+再试一次「从流尾开始等 300 毫秒」的读法——期间没有新写入，所以返回空：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XREAD COUNT 100 BLOCK 300 STREAMS race:france $
+(nil)
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xread({"race:france": "$"}, count=100, block=300)   # None
+```
+
+</TabItem>
+</Tabs>
+
+## 性能
+
+写入一条 entry 是 **O(1)**。按 ID 访问单条 entry 是 **O(n)**，这里的 _n_ 是 ID 的长度——因为流用基数树（radix tree）实现，而 ID 通常短且定长，实际效果就是常数时间。
+
+所以「插入快、读取也快」这句总结是成立的，具体到每个命令的复杂度官方文档单独给了说明。
+
+## Streams 基础
+
+流是只能追加的结构，基本的写入命令是 `XADD`，它把一条新 entry 追加到指定流。
+
+每条 entry 由一组 field-value 对组成，形态上很像字典或 Redis Hash：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XADD race:france * rider Castilla speed 29.9 position 1 location_id 2
+"1692632147973-0"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xadd(
+    "race:france",
+    {"rider": "Castilla", "speed": 29.9, "position": 1, "location_id": 2},
+)  # '1692632147973-0'
+```
+
+</TabItem>
+</Tabs>
+
+第一个参数是 key `race:france`，第二个参数是 entry ID。这里传 `*` 表示让服务端生成，生成结果由命令返回（`1692632147973-0`）。ID 单调递增：新 entry 的 ID 一定大于此前所有 entry。绝大多数情况下都应该让服务端自动生成，显式指定 ID 的场景很少。这也正是流像日志文件的地方——日志用行号或字节偏移标识位置，流用 ID。
+
+`XLEN` 直接取条数：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XLEN race:france
+(integer) 4
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xlen("race:france")   # 4
+```
+
+</TabItem>
+</Tabs>
+
+### Entry IDs
+
+`XADD` 返回的 ID 由两部分组成，格式是：
+
+```
+<millisecondsTime>-<sequenceNumber>
+```
+
+- 毫秒部分取**生成本条 ID 的那个 Redis 节点的本地时间**。但如果当前毫秒数比上一条 entry 的时间还小（时钟回拨），就沿用上一条的时间，这样「ID 单调递增」这个性质不会被时钟跳变破坏。
+- 序号部分用来区分同一毫秒内产生的多条 entry。序号是 64 位宽，实践上同一毫秒内可以产生的条数没有上限。
+
+ID 里带时间，是为了让**按 ID 做区间查询**顺带变成按时间查询，几乎不花额外代价——`XRANGE` 正是这么用的。
+
+如果你需要的是「与时间无关、而是对应某个外部系统 ID」的递增编号，`XADD` 也接受显式 ID：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XADD race:usa 0-1 racer Castilla
+0-1
+> XADD race:usa 0-2 racer Norem
+0-2
+> XADD race:usa 0-1 racer Prickett
+(error) ERR The ID specified in XADD is equal or smaller than the target stream top item
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xadd("race:usa", {"racer": "Castilla"}, id="0-1")   # '0-1'
+r.xadd("race:usa", {"racer": "Norem"}, id="0-2")      # '0-2'
+r.xadd("race:usa", {"racer": "Prickett"}, id="0-1")   # 报错：ID 不够大
+```
+
+</TabItem>
+</Tabs>
+
+注意最小可用 ID 是 `0-1`，且新 ID 必须严格大于流里现有的最大 ID，否则报上面那个错。
+
+Redis 7 及以上还可以只给毫秒部分，让服务端补序号：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XADD race:usa 0-* racer Prickett
+0-3
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xadd("race:usa", {"racer": "Prickett"}, id="0-*")   # '0-3'
+```
+
+</TabItem>
+</Tabs>
+
+## 从 Stream 读取数据
+
+写入很直接，读取则有多种模式。接着用日志文件类比：最自然的一种是 `tail -f`，即「从现在开始监听新消息」。这里和 Redis 的阻塞列表操作不同——`BLPOP` 这类 pop 型操作会把一个元素交给**唯一一个**阻塞客户端，而流希望**多个消费者都能看到**新消息（就像多个 `tail -f` 进程都能看到日志追加），也就是 fan-out。
+
+但这只是其中一种访问方式。也可以把流当**时序存储**：按时间区间取，或用游标增量遍历全部历史。
+
+最后，从消费者视角看，还会希望把消息**分片给多个消费者**处理，让同一份流的不同子集由不同消费者承担，从而横向扩展处理能力——这就是消费者组，Kafka 的做法类似。
+
+三种模式对应不同命令，下面从最简单的区间查询开始。
+
+### Querying by range: XRANGE and XREVRANGE
+
+按区间查只需要两个 ID：**start** 和 **end**，且区间是**闭区间**（含首尾）。两个特殊 ID `-` 和 `+` 分别表示最小和最大 ID。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XRANGE race:france - +
+1) 1) "1692632086370-0"
+   2) 1) "rider"
+      2) "Castilla"
+      3) "speed"
+      4) "30.2"
+      5) "position"
+      6) "1"
+      7) "location_id"
+      8) "1"
+2) 1) "1692632094485-0"
+   2) 1) "rider"
+      2) "Norem"
+      ...（后续 entry 结构相同）
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xrange("race:france", "-", "+")
+# [('1692632086370-0', {...}), ('1692632094485-0', {...}), ...]
+```
+
+</TabItem>
+</Tabs>
+
+每条结果是一个二元数组：ID，以及 field-value 列表。ID 里 `-` 左边是该 entry 创建时所在节点的 Unix 毫秒时间（注意：流复制时 `XADD` 带的是完整 ID，所以副本上的 ID 与主节点一致）。
+
+既然 ID 带时间，就可以直接用时间区间查。此时可以**省略序号**：作为 start 时序号按 0 处理，作为 end 时按该毫秒下的最大序号处理。于是给两个毫秒时间戳就能取到这段时间内产生的所有 entry：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XRANGE race:france 1692632086369 1692632086371
+1) 1) "1692632086370-0"
+   2) 1) "rider"
+      2) "Castilla"
+      ...
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xrange("race:france", 1692632086369, 1692632086371)
+```
+
+</TabItem>
+</Tabs>
+
+真实数据里，一个区间可能命中很多条，所以 `XRANGE` 支持可选的 **COUNT**。分页的写法是：取最后一条返回的 ID，前面加 `(` 表示**开区间**，再作为下一次的 start：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XRANGE race:france - + COUNT 2
+1) 1) "1692632086370-0"
+   ...
+2) 1) "1692632094485-0"
+   ...
+> XRANGE race:france (1692632094485-0 + COUNT 2
+1) 1) "1692632102976-0"
+   ...
+2) 1) "1692632147973-0"
+   ...
+> XRANGE race:france (1692632147973-0 + COUNT 2
+(empty array)
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xrange("race:france", "-", "+", count=2)
+r.xrange("race:france", "(1692632094485-0", "+", count=2)
+r.xrange("race:france", "(1692632147973-0", "+", count=2)   # []
+```
+
+</TabItem>
+</Tabs>
+
+`XRANGE` 的复杂度是定位 *O(log(N))*、返回 M 条 *O(M)*。COUNT 较小时每步都很快，所以它事实上就是流的迭代器，不需要再有 `XSCAN`。
+
+`XREVRANGE` 是反序版本，注意它的 start / stop 参数也是反的；常见用途是看流里最后一条：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XREVRANGE race:france + - COUNT 1
+1) 1) "1692632147973-0"
+   2) 1) "rider"
+      2) "Castilla"
+      3) "speed"
+      4) "29.9"
+      5) "position"
+      6) "1"
+      7) "location_id"
+      8) "2"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xrevrange("race:france", "+", "-", count=1)
+```
+
+</TabItem>
+</Tabs>
+
+## 用 XREAD 监听新元素
+
+按区间取不适用时，通常想要的是**订阅新到的消息**。它表面上像 Pub/Sub 的频道订阅，也像阻塞列表等新元素，但消费语义有三处根本差别：
+
+1. 一条流可以有**多个客户端同时等数据**，每条新消息默认会投递给**所有**等待者；阻塞列表则是一个元素只给一个客户端。这种 fan-out 更像 Pub/Sub。
+2. Pub/Sub 是 fire-and-forget、根本不存储；阻塞列表在消息被取走时就**弹出**（删除）了。流不一样：所有消息一直追加在流里（除非显式删除），每个消费者靠**记住自己收到的最后一条 ID** 来判断「哪些对我而言是新的」。
+3. 消费者组提供了 Pub/Sub 和阻塞列表都给不了的控制力：同一份流上可以有多个组、显式确认、可检查的 pending 列表、消息认领，以及每个客户端只能看到属于自己的历史。
+
+负责「监听新消息」的命令是 `XREAD`，先看最简单的非阻塞形式：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XREAD COUNT 2 STREAMS race:france 0
+1) 1) "race:france"
+   2) 1) 1) "1692632086370-0"
+         2) 1) "rider"
+            2) "Castilla"
+            ...
+      2) 1) "1692632094485-0"
+         2) 1) "rider"
+            2) "Norem"
+            ...
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xread({"race:france": "0"}, count=2)
+# [['race:france', [('1692632086370-0', {...}), ('1692632094485-0', {...})]]]
+```
+
+</TabItem>
+</Tabs>
+
+**COUNT** 是可选的，`XREAD` 唯一必需的选项是 **STREAMS**：后面先跟 key 列表，再跟每个 key 对应的「已见过的最大 ID」。上例写 `STREAMS race:france 0`，意思是只要 ID 大于 `0-0` 的消息。返回里带 key 名，是因为一次可以读多个流，比如 `STREAMS race:france race:italy 0 0`。因此 **STREAMS 必须是最后一个选项**，其它选项都得写在它前面。
+
+这种形态和 `XRANGE` 差别还不大，真正有用的是加上 **BLOCK** 变成阻塞命令：
+
+```
+> XREAD BLOCK 0 STREAMS race:france $
+```
+
+这里去掉了 COUNT，加 `BLOCK 0`（0 表示永不超时），ID 换成特殊值 `$`。`$` 的含义是「以这个流当前最大的 ID 作为起点」，于是只会收到**从此刻起**新写入的消息，效果接近 `tail -f`。
+
+用 BLOCK 时并非必须写 `$`，任何合法 ID 都行：能立刻满足就立刻返回，否则才阻塞。常规的消费循环是：第一次用 `$`，之后每次用上一条收到的消息 ID。
+
+阻塞版同样可以同时听多个流。只要其中有至少一个流存在大于对应 ID 的元素，就同步返回；否则阻塞，并在**第一个**有新数据的流上返回结果。阻塞读在客户端之间是**公平**的：先阻塞的客户端先被唤醒，FIFO。
+
+`XREAD` 只有 COUNT 和 BLOCK 两个选项，职责很窄——把消费者挂到一个或多个流上。更强的消费能力在消费者组 API 里，那是另一个命令 `XREADGROUP`。
+
+## 消费者组
+
+如果任务是「同一份流交给多个客户端消费」，`XREAD` 的 fan-out 就够了，甚至可以用副本来提高读扩展性。但有些问题要的不是「每个客户端都拿到全量」，而是**不同子集分给不同客户端**。最典型的场景是消息处理很慢：让 N 个 worker 各拿一部分，处理能力就能横向扩展。
+
+设想三个消费者 C1、C2、C3，流里有消息 1..7，期望的分配是：
+
+```
+1 -> C1
+2 -> C2
+3 -> C3
+4 -> C1
+5 -> C2
+6 -> C3
+7 -> C1
+```
+
+Redis 用**消费者组**实现这件事。需要强调：从实现角度看，Redis 的消费者组和 Kafka 的消费者组毫无关系，只是功能相似，所以沿用了 Kafka 的术语。
+
+消费者组像一个「伪消费者」：它从流里取数据，再分发给组内多个消费者，并提供这些保证：
+
+1. 每条消息只投递给**一个**消费者，不会重复投递给多人。
+2. 组内用名字标识消费者，名字是区分大小写的字符串，由客户端自己选。所以断线重连后只要用同一个名字，组内状态还在；反过来，唯一性也得客户端自己保证。
+3. 每个组维护「**第一个尚未消费的 ID**」，因此消费者要新消息时，只需返回此前没投递过的。
+4. 消费一条消息需要**显式确认**（`XACK`），Redis 把这理解为「已正确处理，可以从组里移除引用」。
+5. 组会跟踪所有 **pending**（已投递但尚未确认）的消息。因此访问历史时，每个消费者**只看到投递给自己的那些**。
+
+换句话说，消费者组就是挂在流上的「一份状态」。所有 pending 消息合起来构成 **PEL（Pending Entries List，待处理条目列表）**，每条记录消息 ID、归属消费者、空闲时间和投递次数。
+
+```
++----------------------------------------+
+| consumer_group_name: mygroup           |
+| consumer_group_stream: somekey         |
+| last_delivered_id: 1292309234234-92    |
+|                                        |
+| consumers:                             |
+|    "consumer-1" with pending messages  |
+|       1292309234234-4                  |
+|       1292309234232-8                  |
+|    "consumer-42" with pending messages |
+|       ... (and so forth)               |
++----------------------------------------+
+```
+
+这样看就很容易理解：为什么消费者能只看自己的 pending 历史，为什么新消息只返回 ID 大于 `last_delivered_id` 的。同时它只是流的附属结构，所以一个流可以有多个组、各自的消费者互不相干；同一个流上也可以既有 `XREAD` 的普通读者，又有多个组里的 `XREADGROUP` 读者。
+
+基本命令：
+
+- `XGROUP`：创建、销毁、管理消费者组。
+- `XREADGROUP`：通过消费者组读流。
+- `XACK`：把 pending 消息标记为已正确处理。
+- `XNACK`：把 pending 消息退还给组（不确认），让它们能立即被重新投递。
+- `XACKDEL`：把「确认」和「删除」合成一个原子操作，并对消费者组引用提供额外控制。
+
+## 创建消费者组
+
+假设 `race:france` 这个流已经存在，创建组只需要给一个 ID：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XGROUP CREATE race:france france_riders $
+OK
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xgroup_create("race:france", "france_riders", id="$")   # True
+```
+
+</TabItem>
+</Tabs>
+
+这个 ID 决定「组刚创建时，下一条该发什么」，也就是创建那一刻的**最后一条消息 ID**。给 `$` 表示只投递此后新到的消息；给 `0` 表示从历史开头开始消费全部消息；当然也可以给任意合法 ID，效果是投递 ID 大于它的消息。
+
+`XGROUP CREATE` 还支持 `MKSTREAM`，在流不存在时顺带创建：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XGROUP CREATE race:italy italy_riders $ MKSTREAM
+OK
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xgroup_create("race:italy", "italy_riders", id="$", mkstream=True)
+```
+
+</TabItem>
+</Tabs>
+
+接下来用 `XREADGROUP` 以 Alice、Bob 两个消费者读，观察消息如何分流。它和 `XREAD` 很像，同样支持 **BLOCK**，否则就是同步命令；但**必须**带 `GROUP` 选项，两个参数分别是组名和本次读取的消费者名。**COUNT** 的语义与 `XREAD` 相同。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XADD race:italy * rider Castilla
+"1692632639151-0"
+> XADD race:italy * rider Royce
+"1692632647899-0"
+> XADD race:italy * rider Sam-Bodden
+"1692632662819-0"
+> XADD race:italy * rider Prickett
+"1692632670501-0"
+> XADD race:italy * rider Norem
+"1692632678249-0"
+
+> XREADGROUP GROUP italy_riders Alice COUNT 1 STREAMS race:italy >
+1) 1) "race:italy"
+   2) 1) 1) "1692632639151-0"
+         2) 1) "rider"
+            2) "Castilla"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xadd("race:italy", {"rider": "Castilla"})
+r.xadd("race:italy", {"rider": "Royce"})
+r.xadd("race:italy", {"rider": "Sam-Bodden"})
+r.xadd("race:italy", {"rider": "Prickett"})
+r.xadd("race:italy", {"rider": "Norem"})
+
+r.xreadgroup("italy_riders", "Alice", {"race:italy": ">"}, count=1)
+# [['race:italy', [('1692632639151-0', {'rider': 'Castilla'})]]]
+```
+
+</TabItem>
+</Tabs>
+
+返回结构与 `XREAD` 一致。这里的重点是 ID 位置上的特殊值 `>`：它只在消费者组语境下有效，含义是**从未投递给任何消费者的消息**。
+
+这几乎总是你想要的。但也可以给真实 ID（如 `0`），这时 `XREADGROUP` 返回的是**该消费者自己的 pending 历史**，永远不会返回新消息。归纳一下：
+
+- ID 为 `>`：只返回从未投递过的新消息，并顺带更新组的 **last delivered ID**。
+- ID 为其它合法数值：访问**pending 历史**，即曾经投递给「指定名字的那个消费者」、但还没被 `XACK` 的消息。
+
+用 `0` 试一下，不加 COUNT，只会看到那条 Castilla：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XREADGROUP GROUP italy_riders Alice STREAMS race:italy 0
+1) 1) "race:italy"
+   2) 1) 1) "1692632639151-0"
+         2) 1) "rider"
+            2) "Castilla"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xreadgroup("italy_riders", "Alice", {"race:italy": "0"})
+```
+
+</TabItem>
+</Tabs>
+
+确认之后，它就不再属于 pending 历史：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XACK race:italy italy_riders 1692632639151-0
+(integer) 1
+> XREADGROUP GROUP italy_riders Alice STREAMS race:italy 0
+1) 1) "race:italy"
+   2) (empty array)
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xack("race:italy", "italy_riders", "1692632639151-0")   # 1
+r.xreadgroup("italy_riders", "Alice", {"race:italy": "0"})
+# [['race:italy', []]]
+```
+
+</TabItem>
+</Tabs>
+
+换上 Bob 用 `>` 读两条，拿到的自然是没被 Alice 取走的那两条：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XREADGROUP GROUP italy_riders Bob COUNT 2 STREAMS race:italy >
+1) 1) "race:italy"
+   2) 1) 1) "1692632647899-0"
+         2) 1) "rider"
+            2) "Royce"
+      2) 1) "1692632662819-0"
+         2) 1) "rider"
+            2) "Sam-Bodden"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xreadgroup("italy_riders", "Bob", {"race:italy": ">"}, count=2)
+```
+
+</TabItem>
+</Tabs>
+
+几点注意：
+
+- 消费者在第一次被提到时**自动创建**，不需要显式建。
+- `XREADGROUP` 也能一次读多个 key，但要求每个流上都有**同名**的组。这不是常见需求，技术上可行而已。
+- `XREADGROUP` 是**写命令**：即使它在读流，副作用也修改了消费者组状态，所以只能在 master 上调用。
+
+一个完整的消费者实现思路（源文档用 Ruby 演示）是：启动时先读**自己的 pending 历史**（因为上次可能崩溃了，要重读那些已投递未确认的消息），历史清空（返回空列表）后再切到 `>` 收新消息。核心循环大致是：
+
+```python
+last_id = "0-0"
+check_backlog = True
+
+while True:
+    my_id = last_id if check_backlog else ">"
+    resp = r.xreadgroup("mygroup", "consumer-1", {"my_stream_key": my_id},
+                        count=10, block=2000)
+    if resp is None:
+        continue                      # 超时，重试
+    msgs = resp[0][1]
+    if not msgs:
+        check_backlog = False         # 历史读完了，切到新消息
+        continue
+    for msg_id, fields in msgs:
+        process_message(msg_id, fields)
+        r.xack("my_stream_key", "mygroup", msg_id)
+        last_id = msg_id
+```
+
+注意同一条消息可能被处理一次或多次——至少在消费者故障时如此，另外还受 Redis 持久化与复制的边界影响。
+
+## 从永久失败中恢复
+
+上面的模型能应对「重启后继续自己的 pending」。但现实中消费者可能**永久失败**、再也不回来，它名下的 pending 消息怎么办？
+
+消费者组提供了**认领（claim）**机制：把某个消费者的 pending 消息改派给另一个消费者。这个动作是**显式**的——必须有人去检查 pending 列表，并用专门的命令认领具体消息；否则服务端会让这些消息永远 pending 在原消费者名下。这样不同应用可以自行决定用不用、怎么用。
+
+第一步是 `XPENDING`，它提供组内 pending 条目的可观测性。这是只读命令，随时可调，不会改变任何消息的归属。最简单形式只给流名和组名：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XPENDING race:italy italy_riders
+1) (integer) 2
+2) "1692632647899-0"
+3) "1692632662819-0"
+4) 1) 1) "Bob"
+      2) "2"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xpending("race:italy", "italy_riders")
+# {'pending': 2, 'min': '1692632647899-0', 'max': '1692632662819-0',
+#  'consumers': [{'name': 'Bob', 'pending': 2}]}
+```
+
+</TabItem>
+</Tabs>
+
+输出依次是：pending 总数（这里 2）、其中最小与最大的消息 ID、以及各消费者及其 pending 数量。只有 Bob 有 2 条，因为 Alice 那条已经 `XACK` 了。
+
+完整签名如下，可以拿到更多细节：
+
+```
+XPENDING <key> <groupname> [[IDLE <min-idle-time>] <start-id> <end-id> <count> [<consumer-name>]]
+```
+
+给 start / end（和 `XRANGE` 一样可以用 `-` / `+`）和 count，就能逐条看：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XPENDING race:italy italy_riders - + 10
+1) 1) "1692632647899-0"
+   2) "Bob"
+   3) (integer) 74642
+   4) (integer) 1
+2) 1) "1692632662819-0"
+   2) "Bob"
+   3) (integer) 74642
+   4) (integer) 1
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xpending_range("race:italy", "italy_riders", "-", "+", 10)
+# [{'message_id': '1692632647899-0', 'consumer': 'Bob',
+#   'time_since_delivered': 74642, 'times_delivered': 1}, ...]
+```
+
+</TabItem>
+</Tabs>
+
+四条信息分别是：ID、当前消费者、**空闲时间**（距上次投递过了多少毫秒）、**投递次数**。末尾可选的 consumer 参数用于只看某个消费者的 pending，例子里没用到。
+
+想知道消息内容，用 `XRANGE` 把同一个 ID 传两次即可：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XRANGE race:italy 1692632647899-0 1692632647899-0
+1) 1) "1692632647899-0"
+   2) 1) "rider"
+      2) "Royce"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xrange("race:italy", "1692632647899-0", "1692632647899-0")
+```
+
+</TabItem>
+</Tabs>
+
+现在 Alice 可以判断：Bob 一分钟都没动静，多半不会很快恢复，该把这些消息**认领**过来接着处理。命令是 `XCLAIM`：
+
+```
+XCLAIM <key> <group> <consumer> <min-idle-time> <ID-1> <ID-2> ... <ID-N>
+```
+
+含义是：对指定的 key 和组，把这些消息的所有权转给指定的消费者；但只有空闲时间**大于** min-idle-time 时才生效。这个下限是为了处理并发认领：
+
+```
+Client 1: XCLAIM race:italy italy_riders Alice 60000 1692632647899-0
+Client 2: XCLAIM race:italy italy_riders Lora 60000 1692632647899-0
+```
+
+成功认领会**重置空闲时间并递增投递计数**，所以第二个客户端会失败——这样就避免了明显的重复处理（尽管一般情况下拿不到 exactly-once）。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XCLAIM race:italy italy_riders Alice 60000 1692632647899-0
+1) 1) "1692632647899-0"
+   2) 1) "rider"
+      2) "Royce"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xclaim("race:italy", "italy_riders", "Alice", 60000, ["1692632647899-0"])
+```
+
+</TabItem>
+</Tabs>
+
+消息归 Alice 了，她处理完再 `XACK`，即使原消费者不回来也能推进。
+
+可以看到 `XCLAIM` 成功后会**顺带返回消息内容**，但这并非必须。若加上 **JUSTID**，只返回认领成功的 ID，省带宽、也更快——适用于「不关心内容、之后会重新扫 pending 历史」的消费者实现。
+
+认领也可以由**独立进程**完成：它只负责检查 pending 列表，把空闲消息分给看起来还活着的消费者。谁是「活着的」可以用 `XINFO` 之类的手段看，这是下一节的话题。
+
+## 自动认领
+
+Redis 6.2 新增的 `XAUTOCLAIM` 把上面这套流程内置了。`XPENDING` + `XCLAIM` 是搭建各种恢复机制的基础积木，而 `XAUTOCLAIM` 让 Redis 自己完成通用流程，覆盖大多数恢复需求。
+
+它会找出空闲的 pending 消息并转移所有权：
+
+```
+XAUTOCLAIM <key> <group> <consumer> <min-idle-time> <start> [COUNT count] [JUSTID]
+```
+
+上面那个例子等价于：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XAUTOCLAIM race:italy italy_riders Alice 60000 0-0 COUNT 1
+1) "0-0"
+2) 1) 1) "1692632662819-0"
+      2) 1) "rider"
+         2) "Sam-Bodden"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xautoclaim("race:italy", "italy_riders", "Alice", 60000,
+             start_id="0-0", count=1)
+# ('0-0', [('1692632662819-0', {'rider': 'Sam-Bodden'})], [])
+```
+
+</TabItem>
+</Tabs>
+
+和 `XCLAIM` 一样返回认领到的消息，但**多返回一个游标**（一个流 ID），可以据此继续迭代 pending 条目：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XAUTOCLAIM race:italy italy_riders Lora 60000 (1692632662819-0 COUNT 1
+1) "1692632662819-0"
+2) 1) 1) "1692632647899-0"
+      2) 1) "rider"
+         2) "Royce"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xautoclaim("race:italy", "italy_riders", "Lora", 60000,
+             start_id="(1692632662819-0", count=1)
+```
+
+</TabItem>
+</Tabs>
+
+当游标返回 `0-0`，说明已经走到 pending 列表末尾。这并不代表没有新的空闲 pending 了，所以下一轮应该从流开头重新开始扫。
+
+## 认领与投递计数
+
+`XPENDING` 输出里的那个计数就是每条消息的**投递次数**。它会在两种情况下 +1：通过 `XCLAIM` 成功认领，或者用 `XREADGROUP` 访问 pending 历史。
+
+有故障时消息被投递多次是正常的，一般最终都会被处理并确认。但某些消息可能因为内容被破坏、或恰好触发处理代码的 bug，导致**永远处理不过去**。这时投递计数就派上用场：一旦某条消息的投递次数超过你设定的阈值，比较稳妥的做法是把它挪到另一个流（死信流）并通知管理员。这就是 Redis Streams 实现 *dead letter* 的方式。
+
+## 把消息退回组内：XNACK
+
+从 Redis 8.8 起，`XNACK` 允许消费者**主动把 pending 消息退还给组**而不确认。它和认领方向相反：不是从别人手里拿，而是把自己的消息交回去，让组能立刻重新投递。
+
+它解决几类常见问题：
+
+1. **优雅关闭**：消费者下线时把 pending 全部释放，其它消费者不必等空闲超时就能接手。
+2. **消费者侧故障**：遇到网络、资源等自身问题，可以把处理不了的消息放回去，而不是让它们干等。
+3. **资源管理**：资源紧张时，把处理不动的大消息或复杂消息让给资源更充裕的消费者。
+4. **毒消息处理**：确认内容非法或恶意时，把消息标记为永久失败。
+
+命令提供三种模式，控制投递计数如何调整：
+
+- **SILENT**：投递计数减一，相当于「撤销这次投递」。用于优雅关闭，或失败与消息内容无关的情况。
+- **FAIL**：计数不变。用于「我处理不了，但别人也许可以」。
+- **FATAL**：把计数置为最大值，标记为永久失败，交给死信流程。
+
+被退还的消息会进入组 PEL 头部一个特殊的「NACK zone」，从而比其它空闲 pending 更优先被重新投递。这比依赖空闲超时的常规认领快得多。
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XNACK mystream mygroup FAIL IDS 1 1526569498055-0
+(integer) 1
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.execute_command("XNACK", "mystream", "mygroup", "FAIL",
+                  "IDS", 1, "1526569498055-0")   # 1
+```
+
+</TabItem>
+</Tabs>
+
+NACK 之后，该消息在 `XPENDING` 里显示为空消费者，可以立刻被认领，或用带 CLAIM 选项的 `XREADGROUP` 消费。
+
+## 多个消费者组
+
+一个流可以挂多个消费者组，每条 entry 会投递给**所有**组；组内再由各消费者协作分担。这样不同应用或服务能各自独立处理同一份流数据。
+
+传统做法里，消费者处理后用 `XACK` 确认，这只从**该组**的 PEL 里删掉引用；entry 本身还在流里，其它组的 PEL 里也还有，直到它们各自确认。如果想在所有组都确认后删掉这条 entry，应用得自己写协调逻辑——正确且高效地实现这件事相当麻烦。
+
+### Enhanced deletion control in Redis 8.2
+
+8.2 起几个命令提供了对「多组引用」的细粒度控制：
+
+- `XADD` 的裁剪选项支持 `KEEPREF`、`DELREF`、`ACKED`
+- `XTRIM` 支持同样的引用处理选项
+- `XDELEX` 提供细粒度的删除控制
+- `XACKDEL` 把确认与删除合并为原子操作
+
+三个选项的语义：
+
+- **KEEPREF**（默认）：保留所有组 PEL 里对这些 entry 的引用，向后兼容。
+- **DELREF**：删除所有组 PEL 中对这些 entry 的引用，把消息痕迹清干净。
+- **ACKED**：只处理那些**已被所有组确认**的 entry。
+
+`ACKED` 最有用：它把「跨多个组协调删除」这件麻烦事自动化了，保证所有组都处理完才真正移除。
+
+## Streams 可观测性
+
+没有可观测性的消息系统极难运维：不知道谁在消费、哪些消息 pending、这个流上有哪些活跃组，一切都是黑盒。所以 Streams 和消费者组提供了若干观察手段。前面讲的 `XPENDING` 就是一个——能看当前处理中的消息、空闲时间和投递次数。
+
+`XINFO` 更进一步，用子命令查看流或消费者组的信息。比如 `XINFO STREAM` 加流名，报告流本身的状态：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XINFO STREAM race:italy
+ 1) "length"
+ 2) (integer) 5
+ 3) "radix-tree-keys"
+ 4) (integer) 1
+ 5) "radix-tree-nodes"
+ 6) (integer) 2
+ 7) "last-generated-id"
+ 8) "1692632678249-0"
+ 9) "groups"
+10) (integer) 1
+11) "first-entry"
+12) 1) "1692632639151-0"
+    2) 1) "rider"
+       2) "Castilla"
+13) "last-entry"
+14) 1) "1692632678249-0"
+    2) 1) "rider"
+       2) "Norem"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xinfo_stream("race:italy")
+# {'length': 5, 'radix-tree-keys': 1, 'radix-tree-nodes': 2,
+#  'last-generated-id': '1692632678249-0', 'groups': 1,
+#  'first-entry': (...), 'last-entry': (...)}
+```
+
+</TabItem>
+</Tabs>
+
+输出里有内部编码信息（基数树的 key 数与节点数）、首尾消息，以及关联的消费者组数量。组的信息可以继续下钻：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XINFO GROUPS race:italy
+1) 1) "name"
+   2) "italy_riders"
+   3) "consumers"
+   4) (integer) 3
+   5) "pending"
+   6) (integer) 2
+   7) "last-delivered-id"
+   8) "1692632662819-0"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xinfo_groups("race:italy")
+# [{'name': 'italy_riders', 'consumers': 3, 'pending': 2,
+#   'last-delivered-id': '1692632662819-0'}]
+```
+
+</TabItem>
+</Tabs>
+
+`XINFO` 输出的是 field-value 序列。作为可观测性命令，它优先让人一眼看懂字段名，也方便以后追加字段而不破坏旧客户端兼容性。相比之下，`XPENDING` 这类要省带宽的命令只给值、不带字段名。
+
+再看组内每个消费者的状态：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XINFO CONSUMERS race:italy italy_riders
+1) 1) "name"
+   2) "Alice"
+   3) "pending"
+   4) (integer) 1
+   5) "idle"
+   6) (integer) 177546
+2) 1) "name"
+   2) "Bob"
+   3) "pending"
+   4) (integer) 0
+   5) "idle"
+   6) (integer) 424686
+3) 1) "name"
+   2) "Lora"
+   3) "pending"
+   4) (integer) 1
+   5) "idle"
+   6) (integer) 72241
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xinfo_consumers("race:italy", "italy_riders")
+# [{'name': 'Alice', 'pending': 1, 'idle': 177546}, ...]
+```
+
+</TabItem>
+</Tabs>
+
+记不住语法时直接问命令本身：
+
+```
+> XINFO HELP
+1) XINFO <subcommand> [<arg> [value] [opt] ...]. Subcommands are:
+2) CONSUMERS <key> <groupname>
+3)     Show consumers of <groupname>.
+4) GROUPS <key>
+5)     Show the stream consumer groups.
+6) STREAM <key> [FULL [COUNT <count>]
+7)     Show information about the stream.
+8) HELP
+9)     Prints this help.
+```
+
+## 与 Kafka 分区的差异
+
+Redis 的消费者组表面上像 Kafka 基于分区的消费者组，但实际差别很大。这里的「分区」只是**逻辑**的，消息都放在同一个 Redis key 里；客户端怎么被服务，取决于谁有空处理下一条，而不是它绑定了哪个分区。比如 C3 永久挂掉，Redis 会继续把新消息分给 C1 和 C2，就像现在只剩两个逻辑分区。
+
+同理，如果某个消费者处理得比别人快，单位时间内它就会拿到**更多**消息。能做到这点，是因为 Redis 显式记录了所有未确认消息、谁收了哪条、以及「第一条从未投递给任何消费者的消息 ID」。
+
+反过来，如果你真的想把一个流的分片落到多个 Redis 实例上，就得用多个 key 加一层分片（Redis Cluster 或自建方案）。单个流不会自动分区到多实例。
+
+概括成三种用法：
+
+- 1 个流 → 1 个消费者：按顺序处理。
+- N 个流 → N 个消费者，每个只碰其中一部分流：把上一种模式水平扩展。
+- 1 个流 → N 个消费者：对 N 个消费者做负载均衡，但**同一逻辑条目的消息可能乱序**，因为某个消费者处理消息 3 可能比另一个处理消息 4 更快。
+
+所以 Kafka 的分区更接近「用 N 个不同的 Redis key」，而 Redis 消费者组是**服务端**把单个流的消息负载均衡给 N 个消费者。
+
+## 有界 Stream
+
+很多场景不希望无限收集数据：有时希望流里最多保留固定条数，有时是达到某个规模后把数据搬到非内存、慢一些但适合长期保存历史的存储。Streams 对此有支持，最简单的是 `XADD` 的 **MAXLEN**：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XADD race:italy MAXLEN 2 * rider Jones
+"1692633189161-0"
+> XADD race:italy MAXLEN 2 * rider Wood
+"1692633198206-0"
+> XADD race:italy MAXLEN 2 * rider Henshaw
+"1692633208557-0"
+> XLEN race:italy
+(integer) 2
+> XRANGE race:italy - +
+1) 1) "1692633198206-0"
+   2) 1) "rider"
+      2) "Wood"
+2) 1) "1692633208557-0"
+   2) 1) "rider"
+      2) "Henshaw"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xadd("race:italy", {"rider": "Jones"}, maxlen=2, approximate=False)
+r.xadd("race:italy", {"rider": "Wood"}, maxlen=2, approximate=False)
+r.xadd("race:italy", {"rider": "Henshaw"}, maxlen=2, approximate=False)
+r.xlen("race:italy")   # 2
+```
+
+</TabItem>
+</Tabs>
+
+到长度上限就自动淘汰旧 entry，流的体积保持恒定。目前**没有**「只保留最近一段时间」的选项：这种命令为了行为一致，可能得在淘汰时长时间阻塞。设想写入尖峰、长时间停顿、再写入，且都用同一个时间上限——停顿期间变旧的数据会在下一次写入时被大量淘汰，把流卡住。所以长度上限得由使用者自己规划。
+
+而且按长度裁剪本身也可能很贵：流用基数树的宏节点存储，每个宏节点含几十个元素，改动单个宏节点并不划算。于是可以写成近似形式：
+
+```
+XADD race:italy MAXLEN ~ 1000 * ... entry fields here ...
+```
+
+`~` 表示「不必正好 1000 条」，1000、1010、1030 都行，只要至少保留 1000 条。这样只有当能整节点移除时才真正裁剪，效率高得多，通常也正是你想要的。各客户端库对此的实现不同：比如 Python 客户端默认就是近似裁剪，要精确长度必须显式设置。
+
+`XTRIM` 做同样的事，但可以单独执行：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XTRIM race:italy MAXLEN 10
+(integer) 0
+> XTRIM mystream MAXLEN ~ 10
+(integer) 0
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xtrim("race:italy", maxlen=10, approximate=False)   # 0
+r.xtrim("mystream", maxlen=10)                        # 近似
+```
+
+</TabItem>
+</Tabs>
+
+`XTRIM` 还支持别的策略，其中 **MINID** 是淘汰 ID 小于给定值的 entry。由于 `XTRIM` 是显式命令，用哪种策略、有什么取舍，得使用者自己清楚。
+
+### Trimming with consumer group awareness
+
+8.2 起，`XADD` 的裁剪选项和 `XTRIM` 都支持 `KEEPREF`、`DELREF`、`ACKED`：
+
+```
+XADD mystream KEEPREF MAXLEN 1000 * field value
+XTRIM mystream ACKED MAXLEN 1000
+```
+
+- **KEEPREF**（默认）：照策略裁剪，但保留消费者组 PEL 里的引用。
+- **DELREF**：裁剪并删除所有组 PEL 里的引用。
+- **ACKED**：只裁剪已被所有消费者组确认的 entry。
+
+`ACKED` 对维护多组之间的数据完整性特别有用，保证所有组都处理完才移除。另外官方提到，未来 `XTRIM` 可能支持按 ID 区间删除，方便配合 `XRANGE` 把数据搬到其它存储。
+
+## Streams API 的特殊 ID
+
+流 API 里有好几个特殊 ID，集中列一遍：
+
+| ID | 含义 | 出现在哪里 |
+| --- | --- | --- |
+| `-` | 可能的最小 ID（即 `0-1`） | `XRANGE` 区间起点 |
+| `+` | 可能的最大 ID（`18446744073709551615-18446744073709551615`） | `XRANGE` 区间终点 |
+| `$` | **当前这个流里**最大的 ID | `XREAD`、`XGROUP` 设置起点 |
+| `>` | 组的 last delivered ID，即「从未投递给任何消费者」 | 仅 `XREADGROUP` |
+| `*` | 让服务端为新 entry 自动生成 ID | 仅 `XADD` |
+
+几个容易混的点：
+
+- `$` 不等于 `+`。`+` 是「任何流里可能的最大 ID」，`$` 是「这个流当前的最大 ID」。多数 API 只认其中一种，但把这两个符号分开，避免了同一个符号承载多重含义。
+- `$` 用在 `XREADGROUP` 或创建组时，表示「我已经有全部现有条目，只关心之后新写入的」。
+- `>` 只与消费者组相关，且只在 `XREADGROUP` 里有效。
+- 写 `-` 和 `+` 显然比写那两个大数字清爽得多。
+
+## 持久化、复制与消息安全
+
+流和别的数据结构一样，会异步复制到副本，并持久化进 AOF / RDB。不那么显然的是：**消费者组的完整状态**同样会传播到 AOF、RDB 和副本——主节点上 pending 的消息，副本上也有同样信息；重启后 AOF 也能恢复组状态。
+
+但也正因为用的是 Redis 默认的复制与持久化，要注意：
+
+- 如果消息持久化很重要，AOF 必须配强 fsync 策略。
+- 默认的异步复制**不保证** `XADD` 或组状态变更已经到达副本：故障切换后可能丢东西，取决于副本收到数据的程度。
+- `WAIT` 可以强制把变更传播到一组副本。这让丢数据变得极不可能，但 Sentinel 或 Redis Cluster 的故障切换只是**尽力**选最更新的副本，某些故障场景下仍可能提升一个缺数据的副本。
+
+所以设计应用时，先想清楚故障期间需要什么样的语义，再据此配置，评估是否足够安全。
+
+## 删除单条消息
+
+流有一个专门命令可以按 ID 删掉**中间**的条目。对 append-only 结构来说这看着奇怪，但对隐私合规之类的需求很有用。命令是 `XDEL`，参数是流名加要删的 ID：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> XRANGE race:italy - + COUNT 2
+1) 1) "1692633198206-0"
+   2) 1) "rider"
+      2) "Wood"
+2) 1) "1692633208557-0"
+   2) 1) "rider"
+      2) "Henshaw"
+> XDEL race:italy 1692633208557-0
+(integer) 1
+> XRANGE race:italy - + COUNT 2
+1) 1) "1692633198206-0"
+   2) 1) "rider"
+      2) "Wood"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.xrange("race:italy", "-", "+", count=2)
+r.xdel("race:italy", "1692633208557-0")   # 1
+r.xrange("race:italy", "-", "+", count=2)
+```
+
+</TabItem>
+</Tabs>
+
+### Enhanced deletion with XDELEX
+
+8.2 起，`XDELEX` 对删除提供了更细的控制，尤其在有消费者组时。与其它增强命令一样，它支持 `KEEPREF`、`DELREF`、`ACKED`：
+
+```
+XDELEX mystream ACKED IDS 2 1692633198206-0 1692633208557-0
+```
+
+也就是说，可以只在「所有消费者组都确认过」时才删（`ACKED`），或者连所有组的引用一起清掉（`DELREF`），或者保留现有引用（`KEEPREF`）。
+
+## 零长度 Stream
+
+流与其它结构有一处不同：其它结构在最后一个元素被删掉后，key 本身会消失——比如 `ZREM` 删掉有序集合最后一个成员，整个 key 就没了。流则允许停在**零元素**状态，无论是用 `MAXLEN 0`（`XADD` 或 `XTRIM`）还是 `XDEL` 造成的。
+
+这种不对称的原因在于：流可能挂着消费者组，我们不希望仅仅因为流里暂时没有条目，就丢掉消费者组定义的状态。目前即使没有任何关联的消费者组，流也不会被自动删除。
+
+## 消费一条消息的总延迟
+
+`XRANGE`、`XREAD` 以及不带 BLOCK 的 `XREADGROUP` 这类非阻塞命令，和普通 Redis 命令一样同步执行，谈「延迟」意义不大——更该看文档里的时间复杂度。可以这么说：按区间取数据时，流命令至少和有序集合命令一样快；而 `XADD` 非常快，在普通机器上用 pipeline 每秒插入 50 万到 100 万条很轻松。
+
+真正有意思的延迟，是消费者组里阻塞消费者的**端到端延迟**：从 `XADD` 产生消息，到 `XREADGROUP` 返回该消息被消费者拿到。
+
+## 阻塞消费者如何被服务
+
+先看 Redis 怎么把消息路由给阻塞的消费者（其实所有「等数据」的阻塞操作都是这个模型）：
+
+- 被阻塞的客户端记录在一张哈希表里：key → 等待该 key 的客户端列表。这样某个 key 来了数据，就能定位所有等它的客户端。
+- 发生写入时（这里是 `XADD`），会调用 `signalKeyAsReady()`，把该 key 放进「待处理」列表，因为它可能给阻塞消费者带来了新数据。注意这些 *ready keys* 是**稍后**才处理的，所以同一个事件循环周期内，这个 key 可能还会收到别的写入。
+- 在返回事件循环之前，统一处理 *ready keys*：对每个 key 扫描等待列表，把新数据（对流来说就是消费者所请求区间内的消息）发给相应客户端。
+
+也就是说，在回到事件循环之前，调用 `XADD` 的客户端和阻塞中的消费者，回复都已经写进各自的输出缓冲区。所以 `XADD` 的调用方收到回复的时间，大约就是消费者收到新消息的时间。
+
+这个模型是**推**的：数据是由 `XADD` 的动作直接塞进消费者缓冲区的，因此延迟相当可预测。
+
+## 延迟测试结果
+
+为验证上述特性做过一轮测试：多个 Ruby 进程写消息（额外带一个计算机毫秒时间字段），另一些 Ruby 进程从消费者组读并处理，处理时用当前时间减去消息里的时间戳，得到端到端延迟。结果：
+
+```
+Processed between 0 and 1 ms -> 74.11%
+Processed between 1 and 2 ms -> 25.80%
+Processed between 2 and 3 ms -> 0.06%
+Processed between 3 and 4 ms -> 0.01%
+Processed between 4 and 5 ms -> 0.02%
+```
+
+即 99.9% 的请求延迟不超过 2 毫秒，少量离群值也离均值不远。往流里塞几百万条未确认消息，基准结论基本不变，绝大多数查询依然很快。
+
+两点说明：
+
+- 测试里每轮最多处理 1 万条，也就是 `XREADGROUP` 的 `COUNT` 设为 10000。这会显著增加延迟，但是为了让慢消费者跟得上消息流所必需的；真实世界的延迟会小得多。
+- 测试用的机器按今天的标准非常慢。
+
+## 延伸阅读
+
+- 「Redis Streams Explained」（官方视频）：对 Streams 的入门讲解。
+- 「RU202」（Redis University）：专门讲 Streams 的免费课程。
+- [官方原文](https://redis.io/docs/latest/develop/data-types/streams/)

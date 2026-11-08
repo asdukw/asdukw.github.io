@@ -1,0 +1,103 @@
+---
+title: "2.5 Geospatial：地理位置与半径查询"
+description: 用 GEOADD 存坐标、GEOSEARCH 做半径检索：来源、与 Redis Query Engine 地理功能的区别、距离计算与常见坑。
+sidebar:
+  order: 5
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Redis 的地理索引让你**存坐标、按坐标搜**。它是在有序集合（ZSET）之上加的地理编码：成员是名字，分数是经纬度算出的 geohash，因此查询本质上是一次 ZSET 范围扫描。
+
+它最直接的用途是「附近的人 / 附近的店 / 附近的站点」这类半径或矩形框查询，以及算两点之间的距离。
+
+> **别和 Redis Query Engine 的地理功能搞混**。Search 里的 GEO 字段支持完整的查询语法与多种格式，功能强得多；Geospatial 数据类型面向**简单的**位置查询，格式选项和查询能力都有限。选型时先看需求复杂度。
+
+## 示例
+
+设想你在做一个共享单车 App，要找出离当前位置最近的所有租车站点。
+
+先把几个坐标写进地理索引：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> GEOADD bikes:rentable -122.27652 37.805186 station:1
+(integer) 1
+> GEOADD bikes:rentable -122.2674626 37.8062344 station:2
+(integer) 1
+> GEOADD bikes:rentable -122.2469854 37.8104049 station:3
+(integer) 1
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+import redis
+
+r = redis.Redis(host="localhost", port=6379, decode_responses=True)
+
+r.geoadd("bikes:rentable", (-122.27652, 37.805186, "station:1"))     # 1
+r.geoadd("bikes:rentable", (-122.2674626, 37.8062344, "station:2"))  # 1
+r.geoadd("bikes:rentable", (-122.2469854, 37.8104049, "station:3"))  # 1
+```
+
+</TabItem>
+</Tabs>
+
+参数顺序是 `GEOADD key 经度 纬度 成员`——**经度在前**，这是最容易写反的一处。返回值是新增的成员数（已存在的成员只会更新坐标，不计入）。
+
+然后找出给定坐标 5 公里内的所有站点，并带回各自的距离：
+
+<Tabs syncKey="redis-client">
+<TabItem label="redis-cli">
+
+```bash
+> GEOSEARCH bikes:rentable FROMLONLAT -122.2612767 37.7936847 BYRADIUS 5 km WITHDIST
+1) 1) "station:1"
+   2) "1.8523"
+2) 1) "station:2"
+   2) "1.4979"
+3) 1) "station:3"
+   2) "2.2441"
+```
+
+</TabItem>
+<TabItem label="Python">
+
+```python
+r.geosearch(
+    "bikes:rentable",
+    longitude=-122.2612767,
+    latitude=37.7936847,
+    radius=5,
+    unit="km",
+    withdist=True,
+)
+# [['station:1', 1.8523], ['station:2', 1.4979], ['station:3', 2.2441]]
+```
+
+</TabItem>
+</Tabs>
+
+拆开看这条 `GEOSEARCH`：
+
+- `FROMLONLAT` 指定查询中心点（经度、纬度）。
+- `BYRADIUS 5 km` 表示半径 5 公里；官方文档里同一个命令也支持按矩形框查询。
+- `WITHDIST` 让结果里带上到中心点的距离，单位与查询单位一致，这里是公里。
+
+结果顺序不是承诺，需要确定性输出时自己在客户端按距离排序。半径收小能减少返回的成员数，在大城市索引上尤其明显。
+
+几个实践中的注意点：
+
+- 经纬度精度到小数点后 6 位已经足够，没必要塞更多位。
+- 索引随成员数线性增长，会占内存；地理索引没有「按成员过期」的语义，清理要自己维护。
+- 查询用 `km` / `m` / `mi` / `ft` 等统一单位，混用会得到意料之外的半径。
+
+## 延伸阅读
+
+- [Redis Geospatial Explained](https://www.youtube.com/watch?v=qftiVQraxmI)：官方短视频，用「本地公园景点地图」演示地理索引怎么建。
+- [Redis University 的 RU101](https://university.redis.com/courses/ru101/)：系统讲地理索引的部分。
+- [官方原文](https://redis.io/docs/latest/develop/data-types/geospatial/)
