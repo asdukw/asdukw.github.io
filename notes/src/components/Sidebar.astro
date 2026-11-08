@@ -1,10 +1,12 @@
 ---
 /**
- * 覆盖 Starlight 默认的 Sidebar：
- * 侧栏只渲染「当前系列」，其余系列收进底部的切换入口。
+ * 覆盖 Starlight 默认的 Sidebar，让侧栏只给出「当前上下文」。
+ *
+ * - 系列内页：只显示当前系列的目录（章 / 讲），其余系列收在底部切换入口
+ * - 总览页（没有所属系列）：只显示系列列表，不展开任何系列的章节树
  *
  * 约定：一个顶层 sidebar group = 一个系列，组里那条指向 /notes/<系列>/ 的
- * 「概览」链接就是该系列的入口。这样新增系列时不用改这个组件。
+ * 「概览」链接就是该系列的入口。新增系列时不用改这个组件。
  */
 import MobileMenuFooter from '@astrojs/starlight/components/MobileMenuFooter.astro';
 import SidebarPersister from '@astrojs/starlight/components/SidebarPersister.astro';
@@ -22,8 +24,9 @@ const flatten = (entries: Entry[]): LinkEntry[] =>
 	entries.flatMap((entry) => (entry.type === 'group' ? flatten(entry.entries) : [entry]));
 
 /** 系列入口：组内指向 /notes/<系列>/ 的链接（对应各系列概览页）。 */
-const overviewOf = (group: GroupEntry) =>
-	flatten(group.entries).find((link) => /^\/notes\/[^/]+\/$/.test(link.href));
+const overviewOf = (group: GroupEntry) => flatten(group.entries).find((link) => /^\/notes\/[^/]+\/$/.test(link.href));
+
+const seriesOf = (group: GroupEntry) => ({ label: group.label ?? '', href: overviewOf(group)?.href });
 
 /** 当前页面所属系列，取自 /notes/<系列>/... 的第一段路径。 */
 const currentSeries = Astro.url.pathname.match(/^\/notes\/([^/]+)\//)?.[1];
@@ -31,23 +34,37 @@ const activeGroup = currentSeries
 	? groups.find((group) => overviewOf(group)?.href === `/notes/${currentSeries}/`)
 	: undefined;
 
-const otherSeries = groups
-	.filter((group) => group !== activeGroup)
-	.map((group) => ({ label: group.label ?? '', href: overviewOf(group)?.href }))
+const allSeries = groups
+	.map(seriesOf)
 	.filter((series): series is { label: string; href: string } => Boolean(series.href));
 
-// 进站首页（如 /notes/、/）没有所属系列，保持完整目录当作总览。
-const sublist = activeGroup ? [activeGroup] : sidebar;
+const activeHref = activeGroup ? overviewOf(activeGroup)?.href : undefined;
+const otherSeries = allSeries.filter((series) => series.href !== activeHref);
 ---
 
 <SidebarPersister>
-	<SidebarSublist sublist={sublist as never} />
+	{
+		activeGroup ? (
+			<SidebarSublist sublist={[activeGroup] as never} />
+		) : (
+			<nav class="series-nav" aria-label="系列">
+				<p class="series-nav-title">系列</p>
+				<ul>
+					{allSeries.map((series) => (
+						<li>
+							<a href={series.href}>{series.label}</a>
+						</li>
+					))}
+				</ul>
+			</nav>
+		)
+	}
 </SidebarPersister>
 
 {
 	activeGroup && otherSeries.length > 0 && (
-		<nav class="series-switcher" aria-label="其他系列">
-			<p class="series-switcher-title">其他系列</p>
+		<nav class="series-nav series-nav--others" aria-label="其他系列">
+			<p class="series-nav-title">其他系列</p>
 			<ul>
 				{otherSeries.map((series) => (
 					<li>
@@ -62,32 +79,35 @@ const sublist = activeGroup ? [activeGroup] : sidebar;
 <div class="md:sl-hidden"><MobileMenuFooter /></div>
 
 <style>
-	.series-switcher {
-		margin: 2rem 0 0;
+	.series-nav {
+		margin: 0;
+	}
+	.series-nav--others {
+		margin-top: 2rem;
 		padding-top: 1rem;
 		border-top: 1px solid var(--sl-color-hairline);
 	}
-	.series-switcher-title {
+	.series-nav-title {
 		margin: 0 0 0.5rem;
 		font-size: var(--sl-text-xs);
 		font-weight: 600;
 		letter-spacing: 0.05em;
 		color: var(--sl-color-gray-3);
 	}
-	.series-switcher ul {
+	.series-nav ul {
 		margin: 0;
 		padding: 0;
 		list-style: none;
 	}
-	.series-switcher a {
+	.series-nav a {
 		display: block;
-		padding: 0.2rem 0;
-		font-size: var(--sl-text-sm);
+		padding: 0.35rem 0;
+		font-size: var(--sl-text-base);
 		font-weight: 500;
 		color: var(--sl-color-text-accent);
 		text-decoration: none;
 	}
-	.series-switcher a:hover {
+	.series-nav a:hover {
 		text-decoration: underline;
 	}
 </style>
