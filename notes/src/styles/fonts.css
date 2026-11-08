@@ -1,0 +1,21 @@
+/* 字体方案照抄 Cloudflare 文档站（developers.cloudflare.com）：
+   正文/界面 Inter Variable，等宽 Paper Mono，两款都是 SIL OFL 开源字体。
+
+   唯一的补充是中文：Inter 和 Paper Mono 都没有汉字，纯英文站用不到处理这件事，
+   中文站必须显式补一款中文字体，否则中文会回落到微软雅黑，和 Inter 混排会
+   字形不齐。这里用 Noto Sans SC（思源黑体），几何感和 Inter 最接近。
+
+   三款全部自托管：构建期打包进产物，运行时不请求任何外部 CDN。 */
+
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/noto-sans-sc';
+
+/* Paper Mono 是可变字体（wght 100–800），官方未发布 npm 包，
+   文件来自 GitHub release v1.000，授权见 public/fonts/paper-mono/OFL.txt。 */
+@font-face {
+	font-family: 'Paper Mono';
+	font-style: normal;
+	font-weight: 100 800;
+	font-display: swap;
+	src: url('../fonts/paper-mono-variable.woff2') format('woff2-variations');
+}

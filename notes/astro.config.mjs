@@ -14,7 +14,7 @@ export default defineConfig({
 			title: 'asdukw 笔记',
 			description: '课程与技术笔记，按系列 / 章 / 讲组织。',
 			// 和主站统一的配色 / 字体与少量质感修饰。
-			customCss: ['./src/styles/custom.css'],
+			customCss: ['./src/styles/fonts.css', './src/styles/custom.css'],
 			// 侧栏只显示当前系列，其余系列收进底部切换入口（教学站常见做法）。
 			components: {
 				Sidebar: './src/components/Sidebar.astro',
