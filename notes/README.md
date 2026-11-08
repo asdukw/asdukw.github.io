@@ -15,8 +15,9 @@ src/content/docs/
     └── <系列>/<章>/<讲>.md    # 例：redis/chapter-01/lec-01.md
 ```
 
-系列 / 章 / 讲直接对应目录层级；左侧 sidebar 由 `astro.config.mjs` 里的
-`autogenerate` 自动生成，新增内容不用改配置。写作与目录约定见 `notes/AGENTS.md`。
+系列 / 章 / 讲直接对应目录层级，但左侧 sidebar **要在 `astro.config.mjs` 的 `sidebar` 里显式登记**：
+新增一个系列加一个顶层分组（「概览」入口 + 各章的 `autogenerate`），新增一章加一条 `autogenerate`。
+侧栏只显示当前系列，其余系列收在底部「其他系列」入口。写作与目录约定见 `notes/AGENTS.md`。
 
 ## 命令
 

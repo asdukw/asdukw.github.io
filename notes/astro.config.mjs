@@ -55,9 +55,11 @@ export default defineConfig({
 			social: [
 				{ icon: 'github', label: 'GitHub', href: 'https://github.com/asdukw' },
 			],
-			// 侧栏结构：系列（如 Redis）下挂「概览」和若干「章」，章里每个 .md 是一「讲」。
-			// 章节分组要显示中文的内容标题（而不是目录名 chapter-02），所以这里显式列出；
-			// 新增章节时，在对应系列下加一条 { label, items: [{ autogenerate: { directory } }] }。
+			// 侧栏结构：一个顶层分组 = 一个系列，系列下挂「概览」和若干「章」，章里每个 .md 是一「讲」。
+			// 章节分组要显示中文的内容标题（而不是目录名 chapter-02），所以这里显式列出。
+			// 新增系列：加一个顶层 { label, items: [...] }；新增章节：在对应系列下加一条
+			// { label, items: [{ autogenerate: { directory } }] }。
+			// 渲染时只显示当前系列，由下方 components 里的 Sidebar 覆盖实现。
 			sidebar: [
 				{
 					label: 'Redis',
