@@ -9,11 +9,13 @@
    --sl-color-black 表示页面底色，两个主题下语义相反，改动时别按字面理解。 */
 
 :root {
+	/* 中文站的字体策略：正文回到系统栈，由系统决定中文字形（Windows 微软雅黑 /
+	   macOS 苹方 / Android Noto），中英文天然协调。
+	   Cloudflare 的 Inter 是 Latin-first 方案，用在中文站会出现「英文 Inter、
+	   中文回落到系统字体」的混排，反而比系统栈难看，所以不采用。 */
 	--sl-font:
-		"Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", Roboto,
-		"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC",
-		sans-serif;
-	/* Cloudflare 用的是 Paper Mono（授权字体），这里退回系统等宽字体。 */
+		system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC",
+		"Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
 	--sl-font-mono:
 		ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
 		"Liberation Mono", monospace;
@@ -74,12 +76,8 @@
 
 /* ---- 排版 ---- */
 
-/* 大标题收紧字距，接近 Cloudflare 文档的标题观感 */
-.hero h1,
-.sl-markdown-content :is(h1, h2, h3, h4) {
-	letter-spacing: -0.02em;
-}
-
+/* 中文标题不要负字距：那是给拉丁字母的排版技巧，套到汉字上会让字发挤。
+   这里只做字重和行高的调整。 */
 .sl-markdown-content :is(h1, h2) {
 	font-weight: 700;
 }
