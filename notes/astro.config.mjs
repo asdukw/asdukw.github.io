@@ -64,6 +64,16 @@ export default defineConfig({
 						},
 					],
 				},
+				{
+					label: 'RocketMQ',
+					items: [
+						{ label: '概览', slug: 'notes/rocketmq' },
+						{
+							label: '架构与存储',
+							items: [{ autogenerate: { directory: 'notes/rocketmq/chapter-01' } }],
+						},
+					],
+				},
 			],
 		}),
 		// 构建时校验站内链接和锚点，避免文档越写越多后出现死链。
