@@ -1,0 +1,25 @@
+---
+title: 笔记总览
+description: 所有系列笔记的入口，按系列组织。
+template: splash
+hero:
+  title: 笔记总览
+  tagline: 课程与技术笔记，按系列、章、讲组织。
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+课程与技术笔记按主题分成若干系列。每个系列先给一份概览，说明它要解决什么问题、按什么顺序读，再从第一章进入。
+
+<CardGrid>
+	<LinkCard
+		title="Redis 笔记"
+		description="从入门到缓存实战：先逐个讲数据类型，再谈选型与工程实践。"
+		href="/notes/redis/"
+	/>
+	<LinkCard
+		title="RocketMQ 笔记"
+		description="从架构与存储讲到事务消息与消费模型，先弄清一条消息怎么落盘、怎么被路由。"
+		href="/notes/rocketmq/"
+	/>
+</CardGrid>

@@ -1,0 +1,3 @@
+/* 自托管 Inter Variable（Cloudflare 文档站用的同一款正文/界面字体）。
+   走 @fontsource 而不是 Google Fonts：构建期打包进产物，运行时不依赖外部 CDN。 */
+@import '@fontsource-variable/inter';
