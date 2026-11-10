@@ -139,6 +139,10 @@ export default defineConfig({
 							label: '第 13 章 · 流式系统的哲学',
 							items: [{ autogenerate: { directory: 'notes/ddia/chapter-13' } }],
 						},
+						{
+							label: '第 14 章 · 做正确的事情',
+							items: [{ autogenerate: { directory: 'notes/ddia/chapter-14' } }],
+						},
 					],
 				},
 			],
