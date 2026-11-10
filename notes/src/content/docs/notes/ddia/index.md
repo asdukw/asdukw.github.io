@@ -31,6 +31,7 @@ sidebar:
 - [7.1 分片的利与弊](/notes/ddia/chapter-07/lec-01/)——分区键的取舍，以及用分片做多租户
 - [8.1 事务到底是什么？](/notes/ddia/chapter-08/lec-01/)——ACID 的真实含义，与多对象事务的必要性
 - [9.1 故障与部分失效](/notes/ddia/chapter-09/lec-01/)——分布式系统最根本的故障模型：部分失效
+- [10.1 线性一致性](/notes/ddia/chapter-10/lec-01/)——表现得像单副本的新鲜度保证，以及 CAP 与延迟代价
 
 ## 阅读建议
 

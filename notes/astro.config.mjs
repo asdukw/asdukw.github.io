@@ -122,6 +122,10 @@ export default defineConfig({
 							label: '第 9 章 · 分布式系统的麻烦',
 							items: [{ autogenerate: { directory: 'notes/ddia/chapter-09' } }],
 						},
+						{
+							label: '第 10 章 · 一致性与共识',
+							items: [{ autogenerate: { directory: 'notes/ddia/chapter-10' } }],
+						},
 					],
 				},
 			],
