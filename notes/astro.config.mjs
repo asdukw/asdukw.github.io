@@ -106,6 +106,10 @@ export default defineConfig({
 							items: [{ autogenerate: { directory: 'notes/ddia/chapter-05' } }],
 						},
 						{ label: '第二部分 · 分布式数据', slug: 'notes/ddia/part-ii' },
+						{
+							label: '第 6 章 · 复制',
+							items: [{ autogenerate: { directory: 'notes/ddia/chapter-06' } }],
+						},
 					],
 				},
 			],
