@@ -1,6 +1,7 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import starlightThemeNova from 'starlight-theme-nova';
 import starlightLinksValidator from 'starlight-links-validator';
 
 // 文档站独立部署在 Cloudflare Pages（项目名 asdukw-notes）。
@@ -13,6 +14,8 @@ export default defineConfig({
 		starlight({
 			title: 'asdukw 笔记',
 			description: '课程与技术笔记，按系列 / 章 / 讲组织。',
+			// Starlight Nova 主题（MIT）：整体重排布局、顶栏导航与亮暗色。
+			plugins: [starlightThemeNova()],
 			// 和主站统一的配色 / 字体与少量质感修饰。
 			customCss: ['./src/styles/fonts.css', './src/styles/custom.css'],
 			// 侧栏只显示当前系列，其余系列收进底部切换入口（教学站常见做法）。
@@ -67,6 +70,7 @@ export default defineConfig({
 						{ label: '概览', slug: 'notes/redis' },
 						{
 							label: 'Redis 中的数据类型',
+							collapsed: true,
 							items: [{ autogenerate: { directory: 'notes/redis/chapter-02' } }],
 						},
 					],
@@ -77,6 +81,7 @@ export default defineConfig({
 						{ label: '概览', slug: 'notes/rocketmq' },
 						{
 							label: '架构与存储',
+							collapsed: true,
 							items: [{ autogenerate: { directory: 'notes/rocketmq/chapter-01' } }],
 						},
 					],
@@ -88,60 +93,74 @@ export default defineConfig({
 						{ label: '序言', slug: 'notes/ddia/preface' },
 						{
 							label: '第 1 章 · 数据系统架构中的权衡',
+							collapsed: true,
 							items: [{ autogenerate: { directory: 'notes/ddia/chapter-01' } }],
 						},
 						{
 							label: '第 2 章 · 定义非功能性需求',
+							collapsed: true,
 							items: [{ autogenerate: { directory: 'notes/ddia/chapter-02' } }],
 						},
 						{
 							label: '第 3 章 · 数据模型与查询语言',
+							collapsed: true,
 							items: [{ autogenerate: { directory: 'notes/ddia/chapter-03' } }],
 						},
 						{
 							label: '第 4 章 · 存储与检索',
+							collapsed: true,
 							items: [{ autogenerate: { directory: 'notes/ddia/chapter-04' } }],
 						},
 						{
 							label: '第 5 章 · 编码与演化',
+							collapsed: true,
 							items: [{ autogenerate: { directory: 'notes/ddia/chapter-05' } }],
 						},
 						{ label: '第二部分 · 分布式数据', slug: 'notes/ddia/part-ii' },
 						{
 							label: '第 6 章 · 复制',
+							collapsed: true,
 							items: [{ autogenerate: { directory: 'notes/ddia/chapter-06' } }],
 						},
 						{
 							label: '第 7 章 · 分片',
+							collapsed: true,
 							items: [{ autogenerate: { directory: 'notes/ddia/chapter-07' } }],
 						},
 						{
 							label: '第 8 章 · 事务',
+							collapsed: true,
 							items: [{ autogenerate: { directory: 'notes/ddia/chapter-08' } }],
 						},
 						{
 							label: '第 9 章 · 分布式系统的麻烦',
+							collapsed: true,
 							items: [{ autogenerate: { directory: 'notes/ddia/chapter-09' } }],
 						},
 						{
 							label: '第 10 章 · 一致性与共识',
+							collapsed: true,
 							items: [{ autogenerate: { directory: 'notes/ddia/chapter-10' } }],
 						},
 						{ label: '第三部分 · 衍生数据', slug: 'notes/ddia/part-iii' },
 						{
 							label: '第 11 章 · 批处理',
+							collapsed: true,
 							items: [{ autogenerate: { directory: 'notes/ddia/chapter-11' } }],
 						},
 						{
 							label: '第 12 章 · 流处理',
+							collapsed: true,
 							items: [{ autogenerate: { directory: 'notes/ddia/chapter-12' } }],
 						},
 						{
 							label: '第 13 章 · 流式系统的哲学',
+							collapsed: true,
 							items: [{ autogenerate: { directory: 'notes/ddia/chapter-13' } }],
 						},
 						{
 							label: '第 14 章 · 做正确的事情',
+							collapsed: true,
 							items: [{ autogenerate: { directory: 'notes/ddia/chapter-14' } }],
 						},
 					],

@@ -16,7 +16,8 @@
     "@fontsource-variable/noto-sans-sc": "^5.3.1",
     "astro": "^7.3.6",
     "sharp": "^0.35.3",
-    "starlight-links-validator": "^0.27.0"
+    "starlight-links-validator": "^0.27.0",
+    "starlight-theme-nova": "^0.12.3"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.12",
