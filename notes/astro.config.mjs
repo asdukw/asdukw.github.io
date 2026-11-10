@@ -110,6 +110,10 @@ export default defineConfig({
 							label: '第 6 章 · 复制',
 							items: [{ autogenerate: { directory: 'notes/ddia/chapter-06' } }],
 						},
+						{
+							label: '第 7 章 · 分片',
+							items: [{ autogenerate: { directory: 'notes/ddia/chapter-07' } }],
+						},
 					],
 				},
 			],
