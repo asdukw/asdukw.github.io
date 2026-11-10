@@ -126,6 +126,11 @@ export default defineConfig({
 							label: '第 10 章 · 一致性与共识',
 							items: [{ autogenerate: { directory: 'notes/ddia/chapter-10' } }],
 						},
+						{ label: '第三部分 · 衍生数据', slug: 'notes/ddia/part-iii' },
+						{
+							label: '第 11 章 · 批处理',
+							items: [{ autogenerate: { directory: 'notes/ddia/chapter-11' } }],
+						},
 					],
 				},
 			],
