@@ -131,6 +131,10 @@ export default defineConfig({
 							label: '第 11 章 · 批处理',
 							items: [{ autogenerate: { directory: 'notes/ddia/chapter-11' } }],
 						},
+						{
+							label: '第 12 章 · 流处理',
+							items: [{ autogenerate: { directory: 'notes/ddia/chapter-12' } }],
+						},
 					],
 				},
 			],
