@@ -105,6 +105,7 @@ export default defineConfig({
 							label: '第 5 章 · 编码与演化',
 							items: [{ autogenerate: { directory: 'notes/ddia/chapter-05' } }],
 						},
+						{ label: '第二部分 · 分布式数据', slug: 'notes/ddia/part-ii' },
 					],
 				},
 			],
