@@ -20,7 +20,34 @@ description: 从记录系统到衍生系统：把多个不同的数据系统集�
 
 ## 章节概述
 
-- [第 11 章 · 批处理](/notes/ddia/chapter-11/lec-01/)——MapReduce 这类*面向批处理*的数据流系统，为构建大规模数据系统提供工具与思想
-- [第 12 章 · 流处理](/notes/ddia/chapter-12/lec-01/)——把批处理的思想应用到*流式数据*，用更低延迟完成同样的任务
-- [第 13 章 · 流式系统的哲学](/notes/ddia/chapter-13/lec-01/)——用这些工具构建可靠、可伸缩、可维护的应用
-- [第 14 章 · 做正确的事情](/notes/ddia/chapter-14/lec-01/)——以伦理、隐私与社会影响为主题，为全书收束
+我们将从 [第十一章](/notes/ddia/chapter-11/lec-01/) 开始，研究例如 MapReduce 这样*面向批处理*（batch-oriented）的数据流系统——对于建设大规模数据系统，它们提供了优秀的工具和思想。[第十二章](/notes/ddia/chapter-12/lec-01/) 把这些思想应用到*流式数据*（data streams）中，使我们能用更低的延迟完成同样的任务；[第十三章](/notes/ddia/chapter-13/lec-01/) 探讨如何使用这些工具构建可靠、可伸缩和可维护的应用；[第十四章](/notes/ddia/chapter-14/lec-01/) 以伦理、隐私与社会影响为主题，为全书收束。
+
+## 索引
+
+### [11. 批处理](/notes/ddia/chapter-11/lec-01/)
+
+- [使用 Unix 工具的批处理](/notes/ddia/chapter-11/lec-01/)
+- [分布式系统中的批处理](/notes/ddia/chapter-11/lec-02/)
+- [批处理模型](/notes/ddia/chapter-11/lec-03/)
+- [批处理用例](/notes/ddia/chapter-11/lec-04/)
+- [本章小结](/notes/ddia/chapter-11/lec-05/)
+
+### [12. 流处理](/notes/ddia/chapter-12/lec-01/)
+
+- [传递事件流](/notes/ddia/chapter-12/lec-01/)
+- [数据库与流](/notes/ddia/chapter-12/lec-02/)
+- [流处理](/notes/ddia/chapter-12/lec-03/)
+- [本章小结](/notes/ddia/chapter-12/lec-04/)
+
+### [13. 流式系统的哲学](/notes/ddia/chapter-13/lec-01/)
+
+- [数据集成](/notes/ddia/chapter-13/lec-01/)
+- [分拆数据库](/notes/ddia/chapter-13/lec-02/)
+- [追求正确性](/notes/ddia/chapter-13/lec-03/)
+- [本章小结](/notes/ddia/chapter-13/lec-04/)
+
+### [14. 做正确的事情](/notes/ddia/chapter-14/lec-01/)
+
+- [预测分析](/notes/ddia/chapter-14/lec-01/)
+- [隐私与追踪](/notes/ddia/chapter-14/lec-02/)
+- [总结](/notes/ddia/chapter-14/lec-03/)
