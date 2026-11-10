@@ -114,6 +114,10 @@ export default defineConfig({
 							label: '第 7 章 · 分片',
 							items: [{ autogenerate: { directory: 'notes/ddia/chapter-07' } }],
 						},
+						{
+							label: '第 8 章 · 事务',
+							items: [{ autogenerate: { directory: 'notes/ddia/chapter-08' } }],
+						},
 					],
 				},
 			],
