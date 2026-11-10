@@ -118,6 +118,10 @@ export default defineConfig({
 							label: '第 8 章 · 事务',
 							items: [{ autogenerate: { directory: 'notes/ddia/chapter-08' } }],
 						},
+						{
+							label: '第 9 章 · 分布式系统的麻烦',
+							items: [{ autogenerate: { directory: 'notes/ddia/chapter-09' } }],
+						},
 					],
 				},
 			],
