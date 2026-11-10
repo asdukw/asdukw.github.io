@@ -89,8 +89,8 @@ export default defineConfig({
 				{
 					label: 'DDIA',
 					items: [
-						{ label: '概览', slug: 'notes/ddia' },
 						{ label: '序言', slug: 'notes/ddia/preface' },
+						{ label: '第一部分 · 数据系统基础', slug: 'notes/ddia' },
 						{
 							label: '第 1 章 · 数据系统架构中的权衡',
 							collapsed: true,
