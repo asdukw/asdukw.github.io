@@ -1,7 +1,7 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
-import starlightThemeNord from 'starlight-theme-nord';
+import catppuccin from '@catppuccin/starlight';
 import starlightLinksValidator from 'starlight-links-validator';
 
 // 文档站独立部署在 Cloudflare Pages（项目名 asdukw-notes）。
@@ -14,8 +14,16 @@ export default defineConfig({
 		starlight({
 			title: 'asdukw 笔记',
 			description: '课程与技术笔记，按系列 / 章 / 讲组织。',
-			// Nord 主题（MIT）：蓝灰冷色调，自带亮暗两套。
-			plugins: [starlightThemeNord()],
+			// Catppuccin 主题（MIT）：柔和低饱和。先看 Mocha + green。
+			// 注：@catppuccin/starlight 的插件类型与当前 Starlight 版本有轻微不兼容，运行时正常，这里断言掉类型。
+			plugins: [
+				/** @type {any} */ (
+					catppuccin({
+						dark: { flavor: 'mocha', accent: 'blue' },
+						light: { flavor: 'latte', accent: 'blue' },
+					})
+				),
+			],
 			// 和主站统一的配色 / 字体与少量质感修饰。
 			customCss: ['./src/styles/fonts.css', './src/styles/custom.css'],
 			// 侧栏只显示当前系列，其余系列收进底部切换入口（教学站常见做法）。
