@@ -40,10 +40,43 @@ description: 为什么要分布、有哪几种伸缩架构，以及复制与分�
 
 理解了这些，才能讨论分布式系统里的艰难抉择：第八章讲*事务*，帮助厘清数据系统可能出现的问题以及能做什么；第九、十章讲分布式系统的根本局限。第三部分再讨论如何把多个（可能是分布式的）数据存储集成为一个更大的系统，去满足复杂的应用需求。
 
-## 章节
+## 索引
 
-- [第 6 章 · 复制](/notes/ddia/chapter-06/lec-01/)——单主、多主、无主复制的取舍，以及复制延迟与一致性问题
-- [第 7 章 · 分片](/notes/ddia/chapter-07/lec-01/)——范围与哈希分片、请求路由，以及分片上的二级索引
-- [第 8 章 · 事务](/notes/ddia/chapter-08/lec-01/)——ACID、弱隔离级别、可串行化与分布式事务
-- [第 9 章 · 分布式系统的麻烦](/notes/ddia/chapter-09/lec-01/)——网络、时钟、进程暂停等部分失效问题
-- [第 10 章 · 一致性与共识](/notes/ddia/chapter-10/lec-01/)——线性一致性、逻辑时钟与共识算法
+### [6. 复制](/notes/ddia/chapter-06/lec-01/)
+
+- [单主复制](/notes/ddia/chapter-06/lec-01/)
+- [复制延迟的问题](/notes/ddia/chapter-06/lec-02/)
+- [多主复制](/notes/ddia/chapter-06/lec-03/)
+- [无主复制](/notes/ddia/chapter-06/lec-04/)
+- [总结](/notes/ddia/chapter-06/lec-05/)
+
+### [7. 分片](/notes/ddia/chapter-07/lec-01/)
+
+- [分片的利与弊](/notes/ddia/chapter-07/lec-01/)
+- [键值数据的分片](/notes/ddia/chapter-07/lec-02/)
+- [请求路由](/notes/ddia/chapter-07/lec-03/)
+- [分片与二级索引](/notes/ddia/chapter-07/lec-04/)
+- [总结](/notes/ddia/chapter-07/lec-05/)
+
+### [8. 事务](/notes/ddia/chapter-08/lec-01/)
+
+- [事务到底是什么？](/notes/ddia/chapter-08/lec-01/)
+- [弱隔离级别](/notes/ddia/chapter-08/lec-02/)
+- [可串行化](/notes/ddia/chapter-08/lec-03/)
+- [分布式事务](/notes/ddia/chapter-08/lec-04/)
+- [总结](/notes/ddia/chapter-08/lec-05/)
+
+### [9. 分布式系统的麻烦](/notes/ddia/chapter-09/lec-01/)
+
+- [故障与部分失效](/notes/ddia/chapter-09/lec-01/)
+- [不可靠的网络](/notes/ddia/chapter-09/lec-02/)
+- [不可靠的时钟](/notes/ddia/chapter-09/lec-03/)
+- [知识、真相和谎言](/notes/ddia/chapter-09/lec-04/)
+- [总结](/notes/ddia/chapter-09/lec-05/)
+
+### [10. 一致性与共识](/notes/ddia/chapter-10/lec-01/)
+
+- [线性一致性](/notes/ddia/chapter-10/lec-01/)
+- [ID 生成器和逻辑时钟](/notes/ddia/chapter-10/lec-02/)
+- [共识](/notes/ddia/chapter-10/lec-03/)
+- [总结](/notes/ddia/chapter-10/lec-04/)
