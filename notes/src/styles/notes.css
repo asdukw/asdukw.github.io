@@ -1,0 +1,161 @@
+/* 正文页（note）样式，数值取自 Biome Docs（biomejs.dev）的计算样式：
+   - H1 42px / 50.4px，H2 25px / 30px，H3 20.25px / 24.3px，H4 16px / 19.2px
+   - 正文 16px / 28px，块间距 16px
+   - 标题 wrapper 间距：H2 32px 0 16px，H3 28.08px 0 7.2px，H4 22.88px 0 9.28px
+   - 侧栏选中：淡蓝底 + 3px 左边条；TOC 选中：8% 淡蓝底 + 3px 左边条
+   - Tabs：带边框页签条，12px/700，选中项 3px 内嵌下划线，与代码区间距 12px
+   - Aside：标题条 12px/700，padding 10px 14px；内容区 14px 16px 16px
+   颜色继续用 --sl-color-*，明暗主题自动适配；Biome 的字体是 Geist，这里仍用站点的 Inter + Noto Sans SC。 */
+
+/* 标题层级 */
+
+.sl-markdown-content h2:not(:where(.not-content *)) {
+	font-size: 1.5625rem; /* 25px */
+	line-height: 1.2;
+	letter-spacing: normal;
+}
+
+.sl-markdown-content h3:not(:where(.not-content *)) {
+	font-size: 1.265625rem; /* 20.25px */
+	line-height: 1.2;
+}
+
+.sl-markdown-content h4:not(:where(.not-content *)) {
+	font-size: 1rem; /* 16px */
+	line-height: 1.2;
+}
+
+/* 标题 wrapper：Biome 用固定边距，而不是 Starlight 的 1.5em。
+   wrapper 的 font-size 同时决定锚点图标大小，所以也按 Biome 的值设置。 */
+
+.sl-markdown-content .sl-heading-wrapper.level-h2 {
+	font-size: 1.25rem; /* 20px */
+	margin: 32px 0 16px;
+}
+
+.sl-markdown-content .sl-heading-wrapper.level-h3 {
+	font-size: 1.125rem; /* 18px */
+	margin: 28.08px 0 7.2px;
+}
+
+.sl-markdown-content .sl-heading-wrapper.level-h4 {
+	font-size: 1rem; /* 16px */
+	margin: 22.88px 0 9.28px;
+}
+
+/* 侧栏字号：组标题 16px/700，条目 14px/400，padding 4.2px 8px（Biome 计算值） */
+
+.sidebar .large {
+	font-size: 1rem;
+	font-weight: 700;
+}
+
+.sidebar a {
+	font-size: 0.875rem;
+	line-height: 1.4;
+	padding: 4.2px 8px;
+}
+
+/* 左侧栏选中态：淡底 + 左侧竖条 */
+
+.sidebar a[aria-current='page'],
+.sidebar a[aria-current='page']:hover,
+.sidebar a[aria-current='page']:focus {
+	color: var(--sl-color-text-accent);
+	background-color: color-mix(in srgb, var(--sl-color-accent) 12%, transparent);
+	border-inline-start: 3px solid var(--sl-color-accent);
+	border-radius: 2px;
+	padding-inline-start: 5px;
+	font-weight: 600;
+}
+
+/* 右侧 TOC 选中态：3px 左边条 + 淡底，padding 与 Biome 一致 */
+
+.right-sidebar a[aria-current='true'] {
+	color: var(--sl-color-text-accent);
+	background-color: color-mix(in srgb, var(--sl-color-accent) 8%, transparent);
+	border-inline-start: 3px solid var(--sl-color-accent);
+	border-radius: 2px;
+	padding-inline-start: calc(1rem * var(--depth, 0) + 13px);
+	font-weight: 600;
+}
+
+/* Tabs：带边框的页签条，和下方代码块连成一组 */
+
+.sl-markdown-content .tablist-wrapper {
+	border: 1px solid var(--sl-color-gray-5);
+	border-radius: 2px;
+	background-color: var(--sl-color-gray-6);
+	overflow: hidden;
+}
+
+.sl-markdown-content [role='tablist'] {
+	border-bottom: 0;
+	padding: 0;
+}
+
+.sl-markdown-content .tab > [role='tab'] {
+	padding: 10px 14px;
+	font-size: 0.75rem; /* 12px */
+	font-weight: 700;
+	line-height: 1.2;
+	box-shadow: none;
+}
+
+.sl-markdown-content .tab > [role='tab'][aria-selected='true'] {
+	color: var(--sl-color-white);
+	box-shadow: inset 0 -3px 0 var(--sl-color-accent);
+}
+
+.sl-markdown-content .tablist-wrapper ~ [role='tabpanel'] {
+	margin-top: 0.75rem; /* 12px */
+}
+
+/* 代码块标题条：11px/700，padding 8px 12px，2px 上圆角 */
+
+.expressive-code .frame .header {
+	padding: 8px 12px;
+	font-size: 0.6875rem; /* 11px */
+	font-weight: 700;
+	line-height: 1;
+	letter-spacing: 0.77px;
+	border-radius: 2px 2px 0 0;
+	background-color: var(--sl-color-gray-6);
+}
+
+.expressive-code .frame pre {
+	border-radius: 0 0 2px 2px;
+}
+
+/* Aside：标题条 + 内容区两段式 */
+
+.starlight-aside {
+	margin-block: 16px 20px;
+	padding: 0;
+	border-radius: 4px;
+	overflow: hidden;
+}
+
+.starlight-aside__title {
+	padding: 10px 14px;
+	font-size: 0.75rem; /* 12px */
+	font-weight: 700;
+	line-height: 1.25;
+	background-color: color-mix(in srgb, var(--sl-color-asides-border) 10%, transparent);
+}
+
+.starlight-aside__title + .starlight-aside__content {
+	margin-top: 0;
+}
+
+.starlight-aside__content {
+	padding: 14px 16px 16px;
+}
+
+.starlight-aside__content > :first-child {
+	margin-top: 0;
+}
+
+.starlight-aside__content > :last-child {
+	margin-bottom: 0;
+}
