@@ -1,0 +1,48 @@
+---
+import { getRecentNotes } from '../../lib/content-index';
+
+const notes = (await getRecentNotes(6)).map((note) => {
+	const isoDate = note.date.toISOString().slice(0, 10);
+	return {
+		...note,
+		isoDate,
+		meta: [
+			note.seriesTitle,
+			note.chapter === undefined
+				? note.overview
+					? '概览'
+					: undefined
+				: `第 ${note.chapter} 章`,
+		]
+			.filter(Boolean)
+			.join(' · '),
+	};
+});
+---
+
+{
+	notes.length > 0 && (
+		<section class="home-section" aria-labelledby="home-recent">
+			<header class="home-section-head">
+				<h2 class="home-section-title" id="home-recent">
+					最近更新
+				</h2>
+				<p class="home-section-note">按提交时间排序</p>
+			</header>
+
+			<ol class="recent-list">
+				{notes.map((note) => (
+					<li class="recent-item">
+						<a class="recent-link" href={note.href}>
+							<span class="recent-title">{note.title}</span>
+							<span class="recent-meta">{note.meta}</span>
+							<time class="recent-date" datetime={note.isoDate}>
+								{note.isoDate}
+							</time>
+						</a>
+					</li>
+				))}
+			</ol>
+		</section>
+	)
+}

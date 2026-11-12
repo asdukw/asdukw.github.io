@@ -17,6 +17,7 @@ bun run dev        # 本地开发，默认 http://localhost:4321
 - 内容都在 `src/content/docs/`，Markdown / MDX。
 - 笔记按 `notes/<系列>/<章>/<讲>.md` 组织；目录层级 = 侧栏分组 = 章节结构。
 - 笔记总览页（`src/content/docs/notes/index.mdx`）用 `template: splash` + `LinkCard` 列出各系列：总览页不放侧栏，也不放维护者用的目录约定（那些只写在这里和 `README.md`）。
+- 首页（`src/content/docs/index.mdx`）是 splash：hero + `<HomeContent />`。系列卡片与「最近更新」由 `src/components/home/` 在构建期从内容集合生成（数据在 `src/lib/content-index.ts`，最近更新取 git 提交时间），新增系列 / 章 / 讲后首页自动跟上，不要手写数量。新系列要换图标时在 `SERIES_ICONS` 里登记，未登记的用 `document` 图标。
 - 侧栏是**显式配置**，不是纯自动：新增「系列」要在 `astro.config.mjs` 的 `sidebar` 里加一个顶层分组（`label` + 「概览」的 `slug` + 各章的 `autogenerate`）；新增「章」只在对应系列下加一条 `autogenerate`。
 - 侧栏与翻页的系列隔离靠组件覆盖实现（`src/components/Sidebar.astro`、`src/components/Pagination.astro`，在 `astro.config.mjs` 的 `components` 注册）：一个顶层分组 = 一个系列，组内指向 `/notes/<系列>/` 的链接是该系列入口。新增系列不用改这两个组件。
 - 文档站是中文-only；不要擅自加 i18n locale。

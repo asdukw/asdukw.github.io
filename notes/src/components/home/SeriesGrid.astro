@@ -1,0 +1,44 @@
+---
+import { Icon } from '@astrojs/starlight/components';
+import { getSeries } from '../../lib/content-index';
+
+const series = await getSeries();
+const chapterTotal = series.reduce((sum, item) => sum + item.chapters, 0);
+const lessonTotal = series.reduce((sum, item) => sum + item.lessons, 0);
+---
+
+<section class="home-section" aria-labelledby="home-series">
+	<header class="home-section-head">
+		<h2 class="home-section-title" id="home-series">系列</h2>
+		<p class="home-section-note">
+			{series.length} 个系列 · {chapterTotal} 章 · {lessonTotal} 讲
+		</p>
+	</header>
+
+	<ul class="series-grid">
+		{
+			series.map((item) => (
+				<li>
+					<a class="series-card" href={item.href}>
+						<span class="series-head">
+							<span class="series-icon">
+								<Icon name={item.icon} size="1.25rem" />
+							</span>
+							<span class="series-title">{item.title}</span>
+						</span>
+						<span class="series-desc">{item.description}</span>
+						<span class="series-foot">
+							<span class="series-meta">
+								{item.chapters} 章 · {item.lessons} 讲
+							</span>
+							<span class="series-cta">
+								阅读
+								<Icon name="right-arrow" size="1rem" />
+							</span>
+						</span>
+					</a>
+				</li>
+			))
+		}
+	</ul>
+</section>
