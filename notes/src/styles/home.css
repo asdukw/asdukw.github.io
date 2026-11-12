@@ -5,6 +5,7 @@
 /* 首页没有右侧 TOC，用 Starlight 为无 TOC 页面预留的宽版内容列。 */
 html[data-has-hero][data-has-sidebar]:not([data-has-toc]) {
 	--sl-content-width: 67.5rem;
+	--sl-content-margin-inline: 2rem;
 }
 
 /* Hero */
