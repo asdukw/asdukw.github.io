@@ -32,13 +32,13 @@ const notes = (await getRecentNotes(6)).map((note) => {
 
 			<ol class="recent-list">
 				{notes.map((note) => (
-					<li class="recent-item">
-						<a class="recent-link" href={note.href}>
-							<span class="recent-title">{note.title}</span>
-							<span class="recent-meta">{note.meta}</span>
+					<li>
+						<a class="recent-row" href={note.href}>
 							<time class="recent-date" datetime={note.isoDate}>
 								{note.isoDate}
 							</time>
+							<span class="recent-title">{note.title}</span>
+							<span class="recent-meta">{note.meta}</span>
 						</a>
 					</li>
 				))}

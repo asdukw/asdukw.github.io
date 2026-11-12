@@ -30,6 +30,7 @@ export default defineConfig({
 			components: {
 				Sidebar: './src/components/Sidebar.astro',
 				Pagination: './src/components/Pagination.astro',
+				Hero: './src/components/home/Hero.astro',
 			},
 			// 用主站同款头像做标签页图标。
 			favicon: '/favicon.png',

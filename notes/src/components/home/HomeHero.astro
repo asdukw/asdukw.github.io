@@ -1,0 +1,29 @@
+---
+import { Icon, LinkButton } from '@astrojs/starlight/components';
+
+const { entry } = Astro.locals.starlightRoute;
+const { title = entry.data.title, tagline } = entry.data.hero ?? {};
+---
+
+<header class="home-hero not-content">
+	<h1 class="home-hero-title" id="_top" data-page-title set:html={title} />
+	{tagline && <p class="home-hero-tagline">{tagline}</p>}
+
+	<div class="home-actions">
+		<LinkButton href="/notes/" icon="right-arrow">浏览全部笔记</LinkButton>
+		<button class="home-search-btn" type="button" data-home-search>
+			<Icon name="magnifier" size="1.25rem" />
+			搜索笔记
+		</button>
+	</div>
+</header>
+
+<script>
+	const trigger = document.querySelector<HTMLButtonElement>('[data-home-search]');
+	trigger?.addEventListener('click', (event) => {
+		// 阻止本次点击冒泡到 window：Starlight 打开弹窗后会监听 window 点击并关闭。
+		event.stopPropagation();
+		// 复用顶栏的 Pagefind 弹窗，避免维护第二套搜索 UI。
+		document.querySelector<HTMLButtonElement>('button[data-open-modal]')?.click();
+	});
+</script>

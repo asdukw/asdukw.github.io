@@ -4,7 +4,6 @@
  * 系列卡片自动统计章 / 讲数量，最近更新按 git 提交时间排序。
  * 新增系列或章节后不需要改首页。
  */
-import HowToRead from './HowToRead.astro';
 import RecentNotes from './RecentNotes.astro';
 import SeriesGrid from './SeriesGrid.astro';
 ---
@@ -12,5 +11,8 @@ import SeriesGrid from './SeriesGrid.astro';
 <div class="home not-content">
 	<SeriesGrid />
 	<RecentNotes />
-	<HowToRead />
+
+	<p class="home-note">
+		每个系列从「概览」开始，按章、讲顺序阅读；每页底部的「编辑此页」可跳到 GitHub 上的 Markdown 源文件。
+	</p>
 </div>

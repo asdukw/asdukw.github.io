@@ -1,0 +1,12 @@
+---
+/**
+ * 只替换首页的 Hero：紧凑居中 + 搜索入口。
+ * 其他带 hero 的页面（例如 /notes/）继续用 Starlight 默认实现。
+ */
+import DefaultHero from '@astrojs/starlight/components/Hero.astro';
+import HomeHero from './HomeHero.astro';
+
+const isHome = Astro.url.pathname === '/';
+---
+
+{isHome ? <HomeHero /> : <DefaultHero />}

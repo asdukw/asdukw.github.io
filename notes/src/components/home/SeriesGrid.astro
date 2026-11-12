@@ -15,30 +15,28 @@ const lessonTotal = series.reduce((sum, item) => sum + item.lessons, 0);
 		</p>
 	</header>
 
-	<ul class="series-grid">
+	<div class="series-grid">
+		<span class="series-corner" aria-hidden="true"></span>
+		<span class="series-corner" aria-hidden="true"></span>
+		<span class="series-corner" aria-hidden="true"></span>
+		<span class="series-corner" aria-hidden="true"></span>
+
 		{
 			series.map((item) => (
-				<li>
-					<a class="series-card" href={item.href}>
-						<span class="series-head">
-							<span class="series-icon">
-								<Icon name={item.icon} size="1.25rem" />
-							</span>
-							<span class="series-title">{item.title}</span>
+				<a class="series-card" href={item.href}>
+					<Icon name={item.icon} size="1.75rem" class="series-icon" />
+					<span class="series-title">{item.title}</span>
+					<span class="series-desc">{item.description}</span>
+					<span class="series-foot">
+						<span class="series-meta">
+							{item.chapters} 章 · {item.lessons} 讲
 						</span>
-						<span class="series-desc">{item.description}</span>
-						<span class="series-foot">
-							<span class="series-meta">
-								{item.chapters} 章 · {item.lessons} 讲
-							</span>
-							<span class="series-cta">
-								阅读
-								<Icon name="right-arrow" size="1rem" />
-							</span>
+						<span class="series-arrow">
+							<Icon name="right-arrow" size="1rem" />
 						</span>
-					</a>
-				</li>
+					</span>
+				</a>
 			))
 		}
-	</ul>
+	</div>
 </section>
